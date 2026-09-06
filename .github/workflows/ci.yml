@@ -1,0 +1,78 @@
+# Builds on every push so the blind macOS and Linux targets are checked
+# continuously rather than at release time (DESIGN.md §13). Tags starting
+# with "v" additionally produce installers as workflow artifacts; phase 5
+# turns those into GitHub releases.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: macos-latest
+            name: macos
+          - os: ubuntu-22.04
+            name: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Linux system dependencies
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - run: npm ci
+
+      - name: Frontend tests
+        run: npm test
+
+      - name: Typecheck and bundle frontend
+        run: npm run build
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Compile app (no installer)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: npm run tauri build -- --no-bundle
+
+      - name: Build installers
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm run tauri build
+
+      - name: Upload installers
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: kalimba-man-${{ matrix.name }}
+          path: |
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.deb
+          if-no-files-found: error
