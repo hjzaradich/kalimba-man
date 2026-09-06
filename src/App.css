@@ -338,3 +338,159 @@ input:not([type]) {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* Add-song / library panels */
+
+.panel--wide {
+  width: min(820px, 94vw);
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.urlbox {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.urlbox input {
+  width: 100%;
+}
+
+.urlbox p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+}
+
+.notice {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.warn {
+  color: #f0c36d;
+}
+
+.library__tools {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+}
+
+.library__tools input {
+  width: 100%;
+}
+
+.library__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  max-height: 55vh;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.library__list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.library__list li:last-child {
+  border-bottom: none;
+}
+
+.library__list li.is-current {
+  background: rgba(242, 178, 92, 0.08);
+}
+
+.library__title {
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.library__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.library__actions button {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.library__empty,
+.library__hint {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+}
+
+.badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.badge--measured {
+  color: #8fd38f;
+  border-color: rgba(143, 211, 143, 0.4);
+}
+
+.badge--recorded {
+  color: #7cc0ff;
+  border-color: rgba(124, 192, 255, 0.4);
+}
+
+button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.topbar__title {
+  align-self: center;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.dropzone {
+  position: absolute;
+  inset: 12px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: rgba(20, 22, 28, 0.8);
+  color: var(--accent);
+  font-size: 18px;
+  pointer-events: none;
+}

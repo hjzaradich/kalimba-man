@@ -1,6 +1,9 @@
 //! Native side of Kalimba Man. Phase 0 owns only the data folder and
 //! settings; importers arrive in phase 2. See DESIGN.md §12.
 
+pub mod import;
+pub mod smf;
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -152,6 +155,28 @@ fn delete_song(app: tauri::AppHandle, slug: String) -> Result<(), String> {
     fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// Open the songs folder with the song selected, in Explorer or Finder.
+#[tauri::command]
+fn reveal_song(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    let path = song_path(&data_root(&app)?, &slug)?;
+    tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| e.to_string())
+}
+
+/// Read a song file from anywhere on disk (drag-and-drop, Import button).
+#[tauri::command]
+fn read_song_file(path: String) -> Result<serde_json::Value, String> {
+    let text = fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
+    serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))
+}
+
+/// Fetching and parsing happen off the main thread; the page can be slow.
+#[tauri::command]
+async fn import_url(url: String) -> Result<import::ImportResult, String> {
+    tauri::async_runtime::spawn_blocking(move || import::import_url(&url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn get_settings(app: tauri::AppHandle) -> Result<Settings, String> {
     Ok(read_settings(&data_root(&app)?))
@@ -185,7 +210,10 @@ pub fn run() {
             list_songs,
             load_song,
             save_song,
-            delete_song
+            delete_song,
+            reveal_song,
+            read_song_file,
+            import_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

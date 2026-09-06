@@ -22,6 +22,12 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Importer (DESIGN.md §6): fetch pages with a browser user agent, decode the
+# MIDI URL the site embeds, parse the MIDI, pull notation text out of the HTML.
+ureq = "3"
+scraper = "0.23"
+base64 = "0.22"
+regex-lite = "0.1"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

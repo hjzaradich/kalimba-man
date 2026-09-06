@@ -60,7 +60,7 @@ database. Deleting the folder resets the app; copying a file shares a song.
 | Concern | Choice | Why |
 |---|---|---|
 | Shell | Tauri 2 | Same as `musicmanager`; small installers; builds Windows, macOS, Linux from one codebase |
-| Backend | Rust | HTTP fetch with a browser user agent (bypasses CORS and Cloudflare's bot filter), MIDI parsing (`midly`), file I/O |
+| Backend | Rust | HTTP fetch with a browser user agent (bypasses CORS and Cloudflare's bot filter), MIDI parsing (own tolerant reader, see §6.1), HTML extraction (`scraper`), file I/O |
 | Frontend | React + TypeScript + Vite | Familiar; UI chrome, editor, library |
 | Note renderer | HTML `<canvas>` with `requestAnimationFrame` | Smooth scrolling of hundreds of notes; DOM would jank |
 | Audio | Web Audio API in the frontend | Sine blip + reverb needs no native code; zero dependencies |
@@ -169,6 +169,13 @@ string (Cloudflare returns 403 otherwise; the `.mid` itself is unprotected),
 decode the URL, download the MIDI, and convert tracks to notes. Tempo comes
 from the MIDI's tempo events. Title and artist come from the page's
 `<title>` and the "Artist:" line. Timing is `measured`.
+
+The site's MIDI files are slightly malformed (data bytes with the top bit
+set). The `midly` crate rejects them in strict mode and silently truncates
+them a third of the way through in lenient mode, so the app has its own
+small Standard MIDI File reader (`src-tauri/src/smf.rs`) that masks data
+bytes, honours running status, and keeps whatever a damaged track yielded.
+It is tested against a saved file from the site.
 
 ### 6.2 kalimbatabs.net, text era (2019–2023, most popular songs)
 

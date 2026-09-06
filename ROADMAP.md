@@ -19,7 +19,7 @@ Goal: a window that draws your kalimba.
 Done when: the 46-key board on screen looks like the diagram and switching to
 17-key redraws correctly.
 
-## Phase 1 — Play along to pasted text — built, awaiting a listen
+## Phase 1 — Play along to pasted text — done
 
 Goal: paste a tab from the site, press Play, play along.
 
@@ -36,12 +36,12 @@ Goal: paste a tab from the site, press Play, play along.
 Done when: "Can't Help Falling in Love" pasted from the site plays through
 with notes landing on the right tines and the blip sounding on time.
 
-## Phase 2 — Import from kalimbatabs.net and the song library
+## Phase 2 — Import from kalimbatabs.net and the song library — built
 
 Goal: the "Add song" screen.
 
-- Rust fetch with browser UA; MIDI-era importer (§6.1) using `midly`;
-  text-era importer (§6.2); clear error when neither applies.
+- Rust fetch with browser UA; MIDI-era importer (§6.1) on our own tolerant
+  MIDI reader; text-era importer (§6.2); clear error when neither applies.
 - Add-song screen: URL field, or paste/type text; preview on the board;
   title/artist/BPM fields; save to library.
 - Library screen: list, search, open, delete (with confirm), import a

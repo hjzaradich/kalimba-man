@@ -58,6 +58,10 @@ must line up with the notes.
 in the first Play click (`ensureAudio` in `App.tsx`), never on load: WKWebView
 refuses audio otherwise.
 
+**Use our own MIDI reader, not a crate.** The site's MIDI files have data
+bytes with the top bit set; `midly` truncated them silently. `smf.rs` is
+tested against a real file from the site; keep that fixture.
+
 **The parser never drops input silently.** Anything `notation.ts` cannot read
 becomes a warning with a line and column. Add a test case with the real
 text whenever a site post trips it.
@@ -72,5 +76,7 @@ text whenever a site post trips it.
 - `src/player/` — `transport.ts` (clock), `synth.ts` (Web Audio voice), `scheduler.ts` (hands notes to the synth ahead of time), `noteLayout.ts` (note → tine), `drawPlayer.ts` (one frame), `PlayerCanvas.tsx` (rAF loop), `TransportBar.tsx`.
 - `src/presets.ts` — the shipped layouts, imported from `layouts/*.layout.json`.
 - `src/settings.ts`, `src/songs.ts` — persistence via Tauri commands or localStorage.
-- `src/PasteSongPanel.tsx` — paste notation, see warnings, fix unplayable notes, load.
-- `src-tauri/src/lib.rs` — data folder, settings, song file commands.
+- `src/importer.ts` — turns the Rust import result into a Song; `src/model/notationOut.ts` writes notes back as text.
+- `src/AddSongPanel.tsx` — URL import, paste, and the text editor (with `existing`); `src/LibraryPanel.tsx` — the song list.
+- `src-tauri/src/lib.rs` — data folder, settings, song file commands, import command.
+- `src-tauri/src/import.rs` — page fetch and extraction for both eras of posts, MIDI → notes; `smf.rs` — the tolerant MIDI reader. Fixtures in `src-tauri/fixtures/`.
