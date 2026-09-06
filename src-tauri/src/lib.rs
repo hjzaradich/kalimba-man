@@ -52,6 +52,106 @@ fn data_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|e| e.to_string())
 }
 
+// ---- songs -----------------------------------------------------------------
+//
+// Songs are opaque JSON to the Rust side: the frontend owns the schema
+// (src/model/song.ts). Rust only needs the title and artist for listings.
+
+pub const SONG_EXT: &str = ".kalimba.json";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SongSummary {
+    pub slug: String,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artist: Option<String>,
+    pub timing: String,
+}
+
+/// Only lowercase letters, digits and dashes: a slug can never escape the songs folder.
+fn valid_slug(slug: &str) -> bool {
+    !slug.is_empty()
+        && slug.len() <= 120
+        && slug
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+fn song_path(root: &Path, slug: &str) -> Result<PathBuf, String> {
+    if !valid_slug(slug) {
+        return Err(format!("invalid song name {slug:?}"));
+    }
+    Ok(root.join("songs").join(format!("{slug}{SONG_EXT}")))
+}
+
+pub fn list_song_files(root: &Path) -> Vec<SongSummary> {
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir(root.join("songs")) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some(slug) = name.strip_suffix(SONG_EXT) else {
+            continue;
+        };
+        let Ok(text) = fs::read_to_string(entry.path()) else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+            continue;
+        };
+        let Some(title) = value.get("title").and_then(|t| t.as_str()) else {
+            continue;
+        };
+        out.push(SongSummary {
+            slug: slug.to_string(),
+            title: title.to_string(),
+            artist: value
+                .get("artist")
+                .and_then(|a| a.as_str())
+                .map(str::to_string),
+            timing: value
+                .get("timing")
+                .and_then(|t| t.as_str())
+                .unwrap_or("uniform")
+                .to_string(),
+        });
+    }
+    out.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    out
+}
+
+#[tauri::command]
+fn list_songs(app: tauri::AppHandle) -> Result<Vec<SongSummary>, String> {
+    Ok(list_song_files(&data_root(&app)?))
+}
+
+#[tauri::command]
+fn load_song(app: tauri::AppHandle, slug: String) -> Result<serde_json::Value, String> {
+    let path = song_path(&data_root(&app)?, &slug)?;
+    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+#[tauri::command]
+fn save_song(app: tauri::AppHandle, slug: String, song: serde_json::Value) -> Result<(), String> {
+    let root = data_root(&app)?;
+    ensure_data_dir(&root).map_err(|e| e.to_string())?;
+    let path = song_path(&root, &slug)?;
+    let text = serde_json::to_string_pretty(&song).map_err(|e| e.to_string())?;
+    // Write beside, then rename, so a crash mid-write cannot truncate a song.
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+#[tauri::command]
+fn delete_song(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    let path = song_path(&data_root(&app)?, &slug)?;
+    fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
 #[tauri::command]
 fn get_settings(app: tauri::AppHandle) -> Result<Settings, String> {
     Ok(read_settings(&data_root(&app)?))
@@ -78,7 +178,15 @@ pub fn run() {
             ensure_data_dir(&root)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_settings, save_settings, get_data_dir])
+        .invoke_handler(tauri::generate_handler![
+            get_settings,
+            save_settings,
+            get_data_dir,
+            list_songs,
+            load_song,
+            save_song,
+            delete_song
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -99,6 +207,33 @@ mod tests {
         ensure_data_dir(&root).unwrap();
         for sub in SUBFOLDERS {
             assert!(root.join(sub).is_dir(), "{sub} missing");
+        }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn song_files_list_and_reject_bad_slugs() {
+        let root = temp_root("songs");
+        ensure_data_dir(&root).unwrap();
+        assert!(list_song_files(&root).is_empty());
+
+        let good = song_path(&root, "my-song-2").unwrap();
+        fs::write(
+            &good,
+            r#"{"version":1,"title":"My Song","artist":"Me","timing":"uniform","notes":[]}"#,
+        )
+        .unwrap();
+        // Files that are not songs are skipped, not fatal.
+        fs::write(root.join("songs").join("notes.txt"), "hello").unwrap();
+        fs::write(root.join("songs").join(format!("broken{SONG_EXT}")), "{").unwrap();
+
+        let listed = list_song_files(&root);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].slug, "my-song-2");
+        assert_eq!(listed[0].artist.as_deref(), Some("Me"));
+
+        for bad in ["", "../x", "Song", "a b", "a/b", "a\\b"] {
+            assert!(song_path(&root, bad).is_err(), "{bad:?} should be rejected");
         }
         fs::remove_dir_all(&root).unwrap();
     }

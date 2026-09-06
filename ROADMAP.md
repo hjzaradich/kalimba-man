@@ -3,7 +3,7 @@
 Each phase ends with something you can run and judge. Decisions behind the
 phases are in `DESIGN.md`; section numbers below refer to it.
 
-## Phase 0 — Scaffold and tine board
+## Phase 0 — Scaffold and tine board — done
 
 Goal: a window that draws your kalimba.
 
@@ -19,7 +19,7 @@ Goal: a window that draws your kalimba.
 Done when: the 46-key board on screen looks like the diagram and switching to
 17-key redraws correctly.
 
-## Phase 1 — Play along to pasted text
+## Phase 1 — Play along to pasted text — built, awaiting a listen
 
 Goal: paste a tab from the site, press Play, play along.
 

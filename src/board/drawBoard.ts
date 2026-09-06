@@ -2,7 +2,8 @@
 // file only paints.
 
 import type { Layout } from "../model/layout";
-import { computeBoardGeometry, type BoardGeometry } from "./geometry";
+import { computeBoardGeometry, type BoardGeometry, type TineGeometry } from "./geometry";
+import { drawTineLabel, labelFontSize } from "./labels";
 
 export interface BoardTheme {
   wood: string;
@@ -18,17 +19,35 @@ export const DEFAULT_THEME: BoardTheme = {
   labelOnTine: "#1c1f26",
 };
 
+export interface BoardHighlight {
+  /** Index into layout.tines. */
+  tine: number;
+  /** 0..1, fades the glow. */
+  strength: number;
+}
+
+/**
+ * Paint the board into a `width` x `height` rectangle whose top-left is at
+ * (0, `originY`) in the current canvas coordinates. Returns the geometry so
+ * callers can place falling notes on the tips.
+ */
 export function drawBoard(
   ctx: CanvasRenderingContext2D,
   layout: Layout,
   width: number,
   height: number,
+  originY = 0,
+  highlights: BoardHighlight[] = [],
   theme: BoardTheme = DEFAULT_THEME,
 ): BoardGeometry {
   const geo = computeBoardGeometry(layout, width, height);
-  ctx.clearRect(0, 0, width, height);
+  ctx.save();
+  ctx.translate(0, originY);
 
   drawBody(ctx, geo, theme);
+
+  const glow = new Map<number, number>();
+  for (const h of highlights) glow.set(h.tine, Math.max(glow.get(h.tine) ?? 0, h.strength));
 
   // Bottom tier first. Each tier above is physically on top, so it is painted
   // later and covers the upper part of whatever sits beneath it. Its tips end
@@ -36,14 +55,16 @@ export function drawBoard(
   const byTierBottomUp = [...geo.layers].sort((a, b) => a.layer - b.layer);
   for (const layer of byTierBottomUp) {
     const style = layout.layers[layer.layer];
-    drawBridge(ctx, layer, theme);
     for (const g of geo.tines) {
       if (g.layer !== layer.layer) continue;
       const tine = layout.tines[g.index];
-      drawTine(ctx, g, style.color);
+      drawTine(ctx, g, style.color, glow.get(g.index) ?? 0);
       drawLabel(ctx, g, tine.label, tine.octaveDots, geo.laneWidth, theme, style.color);
     }
   }
+  // One bridge bar over every tier: the line notes land on.
+  drawBridge(ctx, { bridgeY: geo.hitY, left: 0, right: geo.width }, theme);
+  ctx.restore();
   return geo;
 }
 
@@ -63,58 +84,49 @@ function drawBridge(ctx: CanvasRenderingContext2D, layer: { bridgeY: number; lef
   ctx.fillRect(layer.left, layer.bridgeY - 3, layer.right - layer.left, 6);
 }
 
-function drawTine(ctx: CanvasRenderingContext2D, g: { cx: number; width: number; top: number; tip: number }, color: string) {
+function drawTine(ctx: CanvasRenderingContext2D, g: TineGeometry, color: string, glow: number) {
   const x = g.cx - g.width / 2;
   const h = g.tip - g.top;
+  if (glow > 0) {
+    ctx.save();
+    ctx.shadowColor = "#ffffff";
+    ctx.shadowBlur = 18 * glow;
+    ctx.fillStyle = color;
+    roundedRect(ctx, x, g.top - 4, g.width, h + 4, g.width / 2);
+    ctx.fill();
+    ctx.restore();
+  }
   ctx.fillStyle = color;
   roundedRect(ctx, x, g.top - 4, g.width, h + 4, g.width / 2);
   ctx.fill();
   // A darker edge on one side reads as metal without a gradient per frame.
   ctx.fillStyle = "rgba(0,0,0,0.18)";
   ctx.fillRect(x + g.width * 0.7, g.top, g.width * 0.3, h - g.width / 2);
+  if (glow > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${0.55 * glow})`;
+    roundedRect(ctx, x, g.tip - g.width * 2.2, g.width, g.width * 2.2, g.width / 2);
+    ctx.fill();
+  }
 }
 
 function drawLabel(
   ctx: CanvasRenderingContext2D,
-  g: { cx: number; width: number; tip: number },
+  g: TineGeometry,
   label: string,
   octaveDots: number,
   laneWidth: number,
   theme: BoardTheme,
   layerColor: string,
 ) {
-  const fontSize = Math.max(9, Math.min(18, laneWidth * 0.62));
+  const fontSize = labelFontSize(laneWidth);
   const fitsInside = g.width >= fontSize * 0.9;
-  ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  // Inside the metal near the tip when wide enough, otherwise just below it in the layer color.
+  // Inside the metal near the tip when wide enough, otherwise just below it in the tier color.
   const y = fitsInside ? g.tip - fontSize * 1.1 : g.tip + fontSize * 0.9;
-  ctx.fillStyle = fitsInside ? theme.labelOnTine : layerColor;
-
-  const digit = label[0];
-  const accidental = label.slice(1);
-  ctx.fillText(digit, g.cx, y);
-  if (accidental) {
-    ctx.font = `600 ${fontSize * 0.6}px system-ui, sans-serif`;
-    ctx.fillText(accidental === "#" ? "♯" : "♭", g.cx + fontSize * 0.55, y - fontSize * 0.3);
-  }
-
-  const dotR = Math.max(1.2, fontSize * 0.1);
-  const dotGap = dotR * 3;
-  const count = Math.abs(octaveDots);
-  const dir = octaveDots > 0 ? -1 : 1;
-  for (let i = 0; i < count; i++) {
-    const dy = dir * (fontSize * 0.75 + i * dotGap);
-    ctx.beginPath();
-    ctx.arc(g.cx, y + dy, dotR, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  drawTineLabel(ctx, g.cx, y, label, octaveDots, fontSize, fitsInside ? theme.labelOnTine : layerColor);
 }
 
-function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.min(r, w / 2, h / 2);
+export function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
   ctx.beginPath();
   ctx.moveTo(x + rr, y);
   ctx.lineTo(x + w - rr, y);

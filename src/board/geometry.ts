@@ -2,10 +2,10 @@
 //
 // Coordinate system: the board fills a rectangle of `width` x `height` CSS
 // pixels. Tines hang from a bridge bar and their free tips point down toward
-// the player, so the played end of every tine is its bottom. Tier 0 is the
-// bottom tier, against the soundboard: it has the lowest bridge and the
-// lowest tips. Each tier stacked on top has a higher bridge and its tips end
-// a fixed step above the tier beneath, so nothing hides a tip.
+// the player. All tiers hang from one bridge line (`hitY`), which is where
+// falling notes land, so timing reads the same on every tier. Tier 0 is the
+// bottom tier, against the soundboard, and has the lowest tips; each tier
+// stacked on top ends a fixed step higher, so nothing hides a tip.
 
 import { slotCount, type Layout } from "../model/layout";
 
@@ -38,6 +38,12 @@ export interface BoardGeometry {
   slots: number;
   tines: TineGeometry[];
   layers: LayerGeometry[];
+  /**
+   * Y of the shared bridge line, where every tier's tines are anchored.
+   * Falling notes land here, so notes on different tiers can be compared
+   * against one straight line.
+   */
+  hitY: number;
 }
 
 /**
@@ -58,10 +64,8 @@ const BOTTOM_PAD = 0.05;
 const TIP_SPREAD = 0.44;
 /** Distance between the tips of adjacent tiers in one column, as a fraction of height. */
 const TIP_STEP = 0.12;
-/** Bridge rise per tier, as a fraction of height. */
-const LAYER_STEP = 0.07;
-/** Space above the topmost bridge. */
-const TOP_PAD = 0.04;
+/** Space above the bridge line, as a fraction of height. */
+const TOP_PAD = 0.06;
 /** Tine metal width as a fraction of the lane. */
 const TINE_WIDTH = 0.42;
 
@@ -90,7 +94,6 @@ export function referenceTier(layout: Layout): number {
 export function computeBoardGeometry(layout: Layout, width: number, height: number): BoardGeometry {
   const slots = Math.max(1, slotCount(layout));
   const laneWidth = width / slots;
-  const layerCount = Math.max(1, layout.layers.length);
   const ref = referenceTier(layout);
 
   // Pitch range per tier, for length normalisation.
@@ -104,9 +107,10 @@ export function computeBoardGeometry(layout: Layout, width: number, height: numb
     }
   }
 
-  // The bottom tier's bridge sits lowest; each tier above rises by LAYER_STEP.
-  const bottomBridge = height * (TOP_PAD + (layerCount - 1) * LAYER_STEP);
-  const bridgeOf = (layer: number) => bottomBridge - layer * height * LAYER_STEP;
+  // Every tier hangs from the same bridge line so the backs of the tines are
+  // aligned; tiers differ only in length (and colour).
+  const hitY = height * TOP_PAD;
+  const bridgeOf = (_layer: number) => hitY;
 
   // Reference tips are placed so the bottom tier, TIP_STEP * ref below them,
   // still clears the bottom edge.
@@ -155,5 +159,5 @@ export function computeBoardGeometry(layout: Layout, width: number, height: numb
     };
   });
 
-  return { width, height, laneWidth, slots, tines, layers };
+  return { width, height, laneWidth, slots, tines, layers, hitY };
 }

@@ -28,12 +28,14 @@ describe("computeBoardGeometry", () => {
     expect(Math.abs(length(centre - 1) - length(centre + 1))).toBeLessThan(400 * 0.05);
   });
 
-  it("raises each tier's bridge above the one beneath", () => {
+  it("anchors every tier on one bridge line and staggers only the tips", () => {
     const layout = presetById("chill-angels-46")!;
     const geo = computeBoardGeometry(layout, 1200, 500);
     const bridge = (layer: number) => geo.layers[layer].bridgeY;
-    expect(bridge(1)).toBeLessThan(bridge(0));
-    expect(bridge(2)).toBeLessThan(bridge(1));
+    expect(bridge(1)).toBe(bridge(0));
+    expect(bridge(2)).toBe(bridge(0));
+    expect(geo.hitY).toBe(bridge(0));
+    for (const g of geo.tines) expect(g.top).toBe(geo.hitY);
     // In one column, tips step upward tier by tier: bass lowest, sharps highest.
     const inColumn = (layer: number) => geo.tines.find((g) => g.layer === layer && layout.tines[g.index].x === 8)!;
     const [bass, main, sharp] = [inColumn(0), inColumn(1), inColumn(2)];

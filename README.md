@@ -3,8 +3,9 @@
 Learn kalimba songs by playing along: import a tab from kalimbatabs.net and
 watch numbered notes fall onto a drawing of your kalimba's tines.
 
-Status: phase 0 of `ROADMAP.md`. The tine board draws for 17-key, 21-key and
-the Chill Angels 46-key; falling notes come next.
+Status: phase 1 of `ROADMAP.md`. Paste a tab in number notation and play
+along on a 17-key, 21-key or Chill Angels 46-key board with synthesized
+sound. URL import and the song library come next.
 
 ## Develop
 

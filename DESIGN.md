@@ -215,8 +215,11 @@ Ordered by cost. The first two ship in v1.
   tier to reach for.
 - **Labels:** each falling note shows its tine's label and octave dots exactly
   as printed on the instrument.
-- **Hit line** at the tine tips. A note's block length is its duration.
-  Chords are one block spanning the tines involved.
+- **Hit line** at the bridge, where every tier's tines are anchored, so it
+  is one straight line across the board and timing between notes on
+  different tiers reads directly. A note sounds as it crosses the line, then
+  sinks through it. A note's block length is its duration. Chord members are
+  tied by a bar across their leading edges.
 - **Lookahead:** 4 seconds of upcoming notes visible at 1× speed; scales with
   tempo so the visual density stays constant.
 - **Transport:** play/pause, seek bar, tempo slider (25%–150%, pitch
