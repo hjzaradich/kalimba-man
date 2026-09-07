@@ -29,7 +29,10 @@ Rust ones.
 ## Install
 
 Grab the installer for your system from the
-[releases page](https://github.com/hjzaradich/kalimba-man/releases).
+[releases page](https://github.com/hjzaradich/kalimba-man/releases), under
+*Assets* on the newest release: the `_x64-setup.exe` on Windows, the
+`_universal.dmg` on macOS, the `.AppImage` (or `.deb`/`.rpm`) on Linux. The
+`.sig` files and `latest.json` are for the in-app updater.
 Nothing is code-signed (that costs money), so the first run shows a warning:
 
 - **Windows**: SmartScreen says the publisher is unknown. Click *More info*,

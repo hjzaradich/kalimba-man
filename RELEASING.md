@@ -12,7 +12,9 @@ them, with the updater's `latest.json`, as a release on this repo:
 
 https://github.com/hjzaradich/kalimba-man/releases
 
-Installed copies check that file on launch and offer the update.
+Installed copies check that file on launch and offer the update. The
+notes you pass to the script become the release page's text, followed by a
+short "which file to download" guide that CI writes for you.
 
 ## One-time setup
 

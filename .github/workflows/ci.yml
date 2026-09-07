@@ -101,6 +101,29 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
+      - name: Write the release notes
+        id: notes
+        shell: bash
+        run: |
+          # The notes given to scripts/release.mjs live in the annotated tag.
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          notes="$(git tag -l --format='%(contents)' "$TAG" | sed '/^-----BEGIN PGP SIGNATURE-----/,$d')"
+          {
+            echo 'body<<NOTES_EOF'
+            echo "$notes"
+            echo
+            echo '## Which file to download'
+            echo
+            echo "- **Windows:** \`Kalimba.Man_${TAG#v}_x64-setup.exe\` (or the \`.msi\`)"
+            echo "- **macOS:** \`Kalimba.Man_${TAG#v}_universal.dmg\`"
+            echo "- **Linux:** \`Kalimba.Man_${TAG#v}_amd64.AppImage\` (or the \`.deb\` / \`.rpm\`)"
+            echo
+            echo 'The `.sig` files and `latest.json` are for the in-app updater; you do not need them.'
+            echo 'NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+        env:
+          TAG: ${{ github.ref_name }}
+
       - name: Build installers and publish the release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -110,7 +133,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Kalimba Man ${{ github.ref_name }}
-          releaseBody: See the release notes in the commit that made this tag.
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
