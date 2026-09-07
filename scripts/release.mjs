@@ -89,7 +89,11 @@ console.log(`\n  version ${previous} → ${version}`);
 
 const tag = `v${version}`;
 git("add", TAURI_CONF, PACKAGE, CARGO, join(root, "src-tauri", "Cargo.lock"));
-git("commit", "-m", `Release ${tag}${notes ? `\n\n${notes}` : ""}`);
+// The first release may change nothing (the version was already set); then
+// there is nothing to commit and the tag goes on the current commit.
+if (git("status", "--porcelain") !== "") {
+  git("commit", "-m", `Release ${tag}${notes ? `\n\n${notes}` : ""}`);
+}
 git("tag", "-a", tag, "-m", notes || `Version ${version}`);
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 git("push", "origin", branch);
