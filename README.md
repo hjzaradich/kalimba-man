@@ -39,6 +39,8 @@ Nothing is code-signed (that costs money), so the first run shows a warning:
   then *Run anyway*. The installer needs no admin rights.
 - **macOS**: right-click the app and choose *Open*, then confirm. On newer
   macOS go to *System Settings → Privacy & Security → Open Anyway* instead.
+  If it still refuses, or says the app is damaged, run
+  `xattr -cr "/Applications/Kalimba Man.app"` in Terminal and open it again.
 - **Linux**: `chmod +x` the AppImage once, or install the `.deb`.
 
 The app checks for updates when it starts and offers to install them.

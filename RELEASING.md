@@ -33,14 +33,21 @@ short "which file to download" guide that CI writes for you.
 
 ## What friends see
 
-Nothing is code-signed, which costs money and is separate from update
-signing. First run therefore shows a warning:
+Nothing is signed with an Apple or Microsoft certificate, which costs
+money and is separate from update signing. The Mac build carries an
+*ad-hoc* signature (`signingIdentity: "-"` in `tauri.conf.json`): it does
+not identify anyone, but without it Apple Silicon refuses to launch an app
+downloaded from the internet at all, whatever Gatekeeper is told. First run
+therefore shows a warning:
 
 - **Windows**: SmartScreen says the publisher is unknown. Click *More
   info*, then *Run anyway*. Installs per user; no admin rights needed.
 - **macOS**: Gatekeeper refuses to open it. Right-click the app, choose
   *Open*, and confirm. On newer macOS the dialog sends you to
-  *System Settings → Privacy & Security → Open Anyway* instead.
+  *System Settings → Privacy & Security → Open Anyway* instead. If it
+  still does nothing, or says the app is damaged, clear the download
+  quarantine from a terminal and try again:
+  `xattr -cr "/Applications/Kalimba Man.app"`.
 - **Linux**: the AppImage needs `chmod +x` once; the `.deb` installs normally.
 
 Updates on Windows and Linux install in place. On macOS the updater
