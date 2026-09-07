@@ -25,6 +25,21 @@ npm run tauri dev
 `npm test` runs the frontend tests; `cargo test` in `src-tauri` runs the
 Rust ones.
 
+## Install
+
+Grab the installer for your system from the
+[releases page](https://github.com/hjzaradich/kalimba-man-releases/releases).
+Nothing is code-signed (that costs money), so the first run shows a warning:
+
+- **Windows**: SmartScreen says the publisher is unknown. Click *More info*,
+  then *Run anyway*. The installer needs no admin rights.
+- **macOS**: right-click the app and choose *Open*, then confirm. On newer
+  macOS go to *System Settings → Privacy & Security → Open Anyway* instead.
+- **Linux**: `chmod +x` the AppImage once, or install the `.deb`.
+
+The app checks for updates when it starts and offers to install them.
+Releasing is described in `RELEASING.md`.
+
 ## Where data lives
 
 Songs, layouts and settings are plain files in the platform app-data folder

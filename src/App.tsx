@@ -13,6 +13,8 @@ import { Scheduler } from "./player/scheduler";
 import { Synth } from "./player/synth";
 import { Transport } from "./player/transport";
 import { TransportBar } from "./player/TransportBar";
+import { UpdateBanner } from "./UpdateBanner";
+import { useUpdater } from "./useUpdater";
 import { PRESET_LAYOUTS, presetById } from "./presets";
 import { DEFAULT_SETTINGS, getDataDir, isTauri, loadSettings, saveSettings, type Settings } from "./settings";
 import { freeSlug, listSongs, readSongFromFile, readSongFromPath, saveSong, type SongSummary } from "./songs";
@@ -34,6 +36,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const updater = useUpdater();
 
   // One transport, one scheduler, one synth for the life of the app.
   const transport = useMemo(() => new Transport(), []);
@@ -344,6 +347,8 @@ export default function App() {
           </button>
         </label>
       </header>
+
+      <UpdateBanner updater={updater} />
 
       <main className="stage">
         <PlayerCanvas layout={layout} song={song} transport={transport} scheduler={scheduler} practice={practice} onHit={hit} handHints={handHints} className="player-canvas" />

@@ -202,9 +202,21 @@ export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, t
       ctx.stroke();
     }
     if (f.handHints) {
+      // Left thumb: blue, right thumb: orange. A wide band on the thumb's
+      // side plus a full outline, so it reads at a glance on any tier colour.
       const left = v.x < f.width / 2;
-      ctx.fillStyle = left ? "rgba(90,160,255,0.9)" : "rgba(255,120,90,0.9)";
-      ctx.fillRect(left ? v.x - noteWidth / 2 : v.x + noteWidth / 2 - 3, v.top, 3, h);
+      const hand = left ? "rgba(70,150,255,0.95)" : "rgba(255,110,70,0.95)";
+      const band = Math.max(5, noteWidth * 0.3);
+      ctx.save();
+      roundedRect(ctx, v.x - noteWidth / 2, v.top, noteWidth, h, Math.min(6, noteWidth / 3));
+      ctx.clip();
+      ctx.fillStyle = hand;
+      ctx.fillRect(left ? v.x - noteWidth / 2 : v.x + noteWidth / 2 - band, v.top, band, h);
+      ctx.restore();
+      ctx.strokeStyle = hand;
+      ctx.lineWidth = 3;
+      roundedRect(ctx, v.x - noteWidth / 2 + 1.5, v.top + 1.5, noteWidth - 3, h - 3, Math.min(5, noteWidth / 3));
+      ctx.stroke();
     }
     // Label near the leading (bottom) edge so it is read just before landing.
     const tine = f.layout.tines[v.tine];

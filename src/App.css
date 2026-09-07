@@ -72,8 +72,8 @@ input:not([type]) {
 }
 
 .app {
-  display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  display: flex;
+  flex-direction: column;
   height: 100%;
 }
 
@@ -121,6 +121,7 @@ input:not([type]) {
 
 .stage {
   position: relative;
+  flex: 1;
   min-height: 0;
 }
 
@@ -655,4 +656,22 @@ button.danger {
 .editor__nudge button {
   padding: 3px 8px;
   font-size: 12px;
+}
+
+/* Update banner */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  font-size: 13px;
+  background: rgba(242, 178, 92, 0.12);
+  border-bottom: 1px solid rgba(242, 178, 92, 0.4);
+}
+
+.update-banner__actions {
+  display: flex;
+  gap: 8px;
 }

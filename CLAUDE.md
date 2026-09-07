@@ -38,6 +38,11 @@ painted later and shorter (`src/board/geometry.ts`), so every tip stays
 visible. On the 46-key that order is bass, main fan, sharps. Reversing it
 hides tips and labels.
 
+**Never commit the signing key.** `~/.tauri/kalimba-man.key` signs updates;
+its public half is in `tauri.conf.json`. `.gitignore` blocks `*.key`, keep
+it that way. Releases go through `scripts/release.mjs` and CI, never by
+hand-uploading files under an existing tag (`RELEASING.md`).
+
 **Settings are tolerant.** `settings.json` loads with defaults for missing
 fields and ignores unknown ones; corrupt JSON falls back to defaults rather
 than failing startup. Keep it that way when adding fields.

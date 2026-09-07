@@ -294,8 +294,10 @@ Import button.
 - Unsigned by default. Windows shows a SmartScreen warning; macOS requires
   right-click → Open the first time. The README explains both. Signing and
   notarization are a later decision that costs money, not design.
-- Auto-update via the Tauri updater against a public releases repo, reusing
-  the `musicmanager` release script pattern.
+- Auto-update via the Tauri updater against a public releases repo
+  (`hjzaradich/kalimba-man-releases`).
+  `scripts/release.mjs` bumps, tags and pushes; the `release` job in CI
+  builds, signs and publishes with `latest.json`. See `RELEASING.md`.
 - WebView differs per OS (WebView2 on Windows, WKWebView on macOS). Canvas
   and Web Audio are well supported on both, but Web Audio on WKWebView
   needs a user gesture before the context starts. Start audio on the first

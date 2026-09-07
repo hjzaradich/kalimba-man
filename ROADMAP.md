@@ -63,7 +63,7 @@ Goal: wire the transport controls that were placeholders.
 Done when: an untimed song can be recorded in one pass and then plays back
 with the recorded rhythm.
 
-## Phase 4 — Custom layouts — built
+## Phase 4 — Custom layouts — done
 
 Goal: any kalimba, any labeling.
 
@@ -74,7 +74,7 @@ Goal: any kalimba, any labeling.
 Done when: a friend with a 21-key in a different tuning can define it and
 play the same songs.
 
-## Phase 5 — Release
+## Phase 5 — Release — built, awaiting repos and a first tag
 
 - Installers for all three platforms from CI on a tag; README with the
   SmartScreen and Gatekeeper first-run notes.

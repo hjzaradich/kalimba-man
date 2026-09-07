@@ -1,7 +1,16 @@
-# Builds on every push so the blind macOS and Linux targets are checked
-# continuously rather than at release time (DESIGN.md §13). Tags starting
-# with "v" additionally produce installers as workflow artifacts; phase 5
-# turns those into GitHub releases.
+# Two jobs.
+#
+# `build` runs on every push and pull request so the blind macOS and Linux
+# targets are checked continuously rather than at release time
+# (DESIGN.md §13). It compiles the app but makes no installers.
+#
+# `release` runs when a tag `v*` is pushed (scripts/release.mjs makes one).
+# It builds signed installers on all three platforms and publishes them, with
+# the updater's latest.json, as a GitHub release in the public releases repo.
+# Needs two repository secrets:
+#   RELEASES_TOKEN              a fine-grained PAT with Contents: write on
+#                               hjzaradich/kalimba-man-releases
+#   TAURI_SIGNING_PRIVATE_KEY   contents of ~/.tauri/kalimba-man.key
 
 name: CI
 
@@ -11,8 +20,13 @@ on:
     tags: ["v*"]
   pull_request:
 
+env:
+  RELEASES_OWNER: hjzaradich
+  RELEASES_REPO: kalimba-man-releases
+
 jobs:
   build:
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
     strategy:
       fail-fast: false
       matrix:
@@ -26,53 +40,84 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - uses: dtolnay/rust-toolchain@stable
-
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
       - name: Linux system dependencies
         if: matrix.name == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
       - run: npm ci
-
       - name: Frontend tests
         run: npm test
-
       - name: Typecheck and bundle frontend
         run: npm run build
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test
+      - name: Compile app (no installer)
+        run: npm run tauri build -- --no-bundle
 
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            args: ""
+          - os: macos-latest
+            name: macos
+            args: "--target universal-apple-darwin"
+          - os: ubuntu-22.04
+            name: linux
+            args: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.name == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Linux system dependencies
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+      - name: Frontend tests
+        run: npm test
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test
 
-      - name: Compile app (no installer)
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: npm run tauri build -- --no-bundle
-
-      - name: Build installers
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: npm run tauri build
-
-      - name: Upload installers
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@v4
+      - name: Build installers and publish the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
-          name: kalimba-man-${{ matrix.name }}
-          path: |
-            src-tauri/target/release/bundle/**/*.msi
-            src-tauri/target/release/bundle/**/*.exe
-            src-tauri/target/release/bundle/**/*.dmg
-            src-tauri/target/release/bundle/**/*.AppImage
-            src-tauri/target/release/bundle/**/*.deb
-          if-no-files-found: error
+          owner: ${{ env.RELEASES_OWNER }}
+          repo: ${{ env.RELEASES_REPO }}
+          tagName: ${{ github.ref_name }}
+          releaseName: Kalimba Man ${{ github.ref_name }}
+          releaseBody: See the release notes in the commit that made this tag.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }}

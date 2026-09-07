@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2e3a"/>
+      <stop offset="1" stop-color="#14161c"/>
+    </linearGradient>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6b3f2e"/>
+      <stop offset="1" stop-color="#4a2a1e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+  <!-- soundboard -->
+  <rect x="152" y="176" width="720" height="720" rx="96" fill="url(#wood)"/>
+  <!-- bridge -->
+  <rect x="192" y="332" width="640" height="26" rx="13" fill="#9a9aa4"/>
+  <!-- tines: a fan, longest in the centre, in the app's tier colours -->
+  <g stroke-linecap="round">
+    <line x1="256" y1="300" x2="256" y2="560" stroke="#d9dee8" stroke-width="40"/>
+    <line x1="320" y1="300" x2="320" y2="620" stroke="#f2b25c" stroke-width="40"/>
+    <line x1="384" y1="300" x2="384" y2="680" stroke="#d9dee8" stroke-width="40"/>
+    <line x1="448" y1="300" x2="448" y2="740" stroke="#7cc0ff" stroke-width="40"/>
+    <line x1="512" y1="300" x2="512" y2="800" stroke="#d9dee8" stroke-width="40"/>
+    <line x1="576" y1="300" x2="576" y2="740" stroke="#7cc0ff" stroke-width="40"/>
+    <line x1="640" y1="300" x2="640" y2="680" stroke="#d9dee8" stroke-width="40"/>
+    <line x1="704" y1="300" x2="704" y2="620" stroke="#f2b25c" stroke-width="40"/>
+    <line x1="768" y1="300" x2="768" y2="560" stroke="#d9dee8" stroke-width="40"/>
+  </g>
+  <!-- falling note -->
+  <rect x="482" y="120" width="60" height="120" rx="14" fill="#d9dee8"/>
+  <text x="512" y="212" font-family="system-ui, Segoe UI, sans-serif" font-size="80" font-weight="700" fill="#14161c" text-anchor="middle">1</text>
+</svg>
