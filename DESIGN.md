@@ -235,8 +235,11 @@ Ordered by cost. The first two ship in v1.
   wired are disabled with a tooltip, so the layout is settled early.
 - **Hand hints:** tines left of center are left thumb, right of center right
   thumb; a note shows an L or R tint on its edge. Free once tine x is known.
-- **Wait mode:** playback pauses at each note until spacebar or click, then
-  resumes. This is also the tap-to-record mechanism.
+- **Wait mode:** playback pauses at each note (or chord) until spacebar or a
+  click on the board, which also sounds it, then resumes. Recording is the
+  same mechanism with playback off: each hit sounds the group, records the
+  time, and jumps to the next; the taps are quantized to sixteenths at the
+  song's BPM and saved as `timing: "recorded"`.
 
 ## 9. Audio
 

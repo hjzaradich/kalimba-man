@@ -36,7 +36,7 @@ Goal: paste a tab from the site, press Play, play along.
 Done when: "Can't Help Falling in Love" pasted from the site plays through
 with notes landing on the right tines and the blip sounding on time.
 
-## Phase 2 — Import from kalimbatabs.net and the song library — built
+## Phase 2 — Import from kalimbatabs.net and the song library — done
 
 Goal: the "Add song" screen.
 
@@ -52,7 +52,7 @@ Done when: "On Melancholy Hill" imports by URL with real timing and shows
 `measured`; "River Flows in You" imports by URL as `uniform`; a song file
 copied to another machine opens there.
 
-## Phase 3 — Practice tools
+## Phase 3 — Practice tools — built
 
 Goal: wire the transport controls that were placeholders.
 

@@ -494,3 +494,27 @@ button.danger {
   font-size: 18px;
   pointer-events: none;
 }
+
+/* Loop region on the seek bar */
+
+.transport__seekwrap {
+  position: relative;
+  flex: 1;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+}
+
+.transport__seekwrap .transport__seek {
+  width: 100%;
+}
+
+.transport__loop {
+  position: absolute;
+  top: 2px;
+  height: 4px;
+  background: var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+  opacity: 0.8;
+}

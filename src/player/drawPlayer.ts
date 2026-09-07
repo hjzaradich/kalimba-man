@@ -24,6 +24,11 @@ export interface PlayerFrame {
   /** Height of the board at the bottom of the canvas. */
   boardHeight: number;
   handHints?: boolean;
+  /** Note indices being held for the user's hit (wait/record mode). */
+  pending?: number[];
+  /** What to tell the user while holding. */
+  hint?: string | null;
+  loop?: { a: number; b: number } | null;
 }
 
 export interface PlayerTheme {
@@ -34,6 +39,8 @@ export interface PlayerTheme {
   sectionText: string;
   noteLabel: string;
   unplayable: string;
+  loopLine: string;
+  pending: string;
 }
 
 export const PLAYER_THEME: PlayerTheme = {
@@ -44,6 +51,8 @@ export const PLAYER_THEME: PlayerTheme = {
   sectionText: "#aeb4c4",
   noteLabel: "#14161c",
   unplayable: "#e0514f",
+  loopLine: "rgba(242,178,92,0.6)",
+  pending: "#ffffff",
 };
 
 export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, theme = PLAYER_THEME): BoardGeometry {
@@ -93,8 +102,29 @@ export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, t
   ctx.lineTo(f.width, hitY);
   ctx.stroke();
 
-  // Section and lyric lines fall with the notes.
   const fontSize = labelFontSize(geo.laneWidth);
+
+  // Loop bounds fall with the notes too.
+  if (f.loop) {
+    for (const [label, t] of [["A", f.loop.a], ["B", f.loop.b]] as const) {
+      const y = yFor(t);
+      if (y < -20 || y > hitY + 20) continue;
+      ctx.strokeStyle = theme.loopLine;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(f.width, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = theme.loopLine;
+      ctx.font = `700 12px system-ui, sans-serif`;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`Loop ${label}`, f.width - 10, y - 3);
+    }
+  }
+
+  // Section and lyric lines fall with the notes.
   for (const s of f.song.sections) {
     const y = yFor(s.time);
     if (y < -20 || y > hitY + 20) continue;
@@ -114,6 +144,7 @@ export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, t
   const noteWidth = Math.min(geo.laneWidth * 0.8, Math.max(geo.laneWidth * 0.55, 14));
   const chordBottoms = new Map<number, { x1: number; x2: number; y: number }>();
   const visible: { i: number; x: number; top: number; bottom: number; color: string; playable: boolean; tine: number }[] = [];
+  const pending = new Set(f.pending ?? []);
 
   for (let i = 0; i < f.song.notes.length; i++) {
     const n = f.song.notes[i];
@@ -123,7 +154,8 @@ export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, t
     const bottom = yFor(n.time);
     const top = bottom - Math.max(n.duration * pxPerSecond, noteWidth * 0.8);
     // Once landed, the block sinks through the line: only the part still above it is drawn.
-    if (bottom < -4 || top >= hitY) continue;
+    // A pending note is held on the line instead.
+    if (!pending.has(i) && (bottom < -4 || top >= hitY)) continue;
     const color = place.tine === null ? theme.unplayable : f.layout.layers[g.layer].color;
     visible.push({ i, x: g.cx, top, bottom: Math.min(bottom, hitY), color, playable: place.tine !== null, tine: tineIndex });
     if (n.chord !== undefined) {
@@ -148,15 +180,22 @@ export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, t
     ctx.stroke();
   }
 
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 150);
   for (const v of visible) {
     const n = f.song.notes[v.i];
-    const landed = f.now >= n.time;
+    const isPending = pending.has(v.i);
+    const landed = !isPending && f.now >= n.time;
     const h = v.bottom - v.top;
     if (h <= 0) continue;
     ctx.globalAlpha = landed ? 0.5 : 1;
     ctx.fillStyle = v.color;
     roundedRect(ctx, v.x - noteWidth / 2, v.top, noteWidth, h, Math.min(6, noteWidth / 3));
     ctx.fill();
+    if (isPending) {
+      ctx.strokeStyle = theme.pending;
+      ctx.lineWidth = 2 + 2 * pulse;
+      ctx.stroke();
+    }
     if (!v.playable) {
       ctx.strokeStyle = "#fff";
       ctx.lineWidth = 1.5;
@@ -174,6 +213,18 @@ export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, t
       drawTineLabel(ctx, v.x, labelY, v.playable ? tine.label : "?", v.playable ? tine.octaveDots : 0, Math.min(fontSize, noteWidth * 0.9), theme.noteLabel);
     }
     ctx.globalAlpha = 1;
+  }
+
+  if (f.hint) {
+    ctx.fillStyle = "rgba(20,22,28,0.85)";
+    ctx.font = `600 14px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const w = ctx.measureText(f.hint).width + 24;
+    roundedRect(ctx, f.width / 2 - w / 2, hitY - 44, w, 28, 8);
+    ctx.fill();
+    ctx.fillStyle = theme.pending;
+    ctx.fillText(f.hint, f.width / 2, hitY - 30);
   }
 
   return geo;

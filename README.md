@@ -6,8 +6,9 @@ watch numbered notes fall onto a drawing of your kalimba's tines.
 Status: phase 2 of `ROADMAP.md`. Import a tab from a kalimbatabs.net URL
 (with exact timing when the post has MIDI), or paste one; keep songs in a
 library as shareable files; edit the notation; play along on a 17-key,
-21-key or Chill Angels 46-key board with synthesized sound. Practice tools
-come next.
+21-key or Chill Angels 46-key board with synthesized sound; loop a section,
+add a metronome, hold at each note in wait mode, or tap the rhythm into a
+song that had none. Custom layouts come next.
 
 ## Develop
 

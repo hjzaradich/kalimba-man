@@ -5,12 +5,16 @@ import { drawPlayerFrame } from "./drawPlayer";
 import { placeNotes } from "./noteLayout";
 import type { Transport } from "./transport";
 import type { Scheduler } from "./scheduler";
+import type { Practice } from "./practice";
 
 interface Props {
   layout: Layout;
   song: Song | null;
   transport: Transport;
   scheduler: Scheduler;
+  practice: Practice;
+  /** Left click on the canvas: a hit in wait/record mode. */
+  onHit?: () => void;
   handHints?: boolean;
   /** Fraction of the canvas height given to the board. */
   boardFraction?: number;
@@ -22,7 +26,7 @@ interface Props {
  * Redraws every animation frame from the transport's clock and drives the
  * audio scheduler from the same loop.
  */
-export function PlayerCanvas({ layout, song, transport, scheduler, handHints, boardFraction = 0.46, className }: Props) {
+export function PlayerCanvas({ layout, song, transport, scheduler, practice, onHit, handHints, boardFraction = 0.46, className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const placements = useMemo(() => (song ? placeNotes(song, layout) : []), [song, layout]);
 
@@ -54,6 +58,7 @@ export function PlayerCanvas({ layout, song, transport, scheduler, handHints, bo
     const loop = () => {
       raf = requestAnimationFrame(loop);
       transport.tick();
+      practice.tick();
       scheduler.tick();
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
@@ -69,6 +74,9 @@ export function PlayerCanvas({ layout, song, transport, scheduler, handHints, bo
         height,
         boardHeight: Math.round(height * f.boardFraction),
         handHints: f.handHints,
+        pending: practice.pendingNotes,
+        hint: hintFor(practice),
+        loop: transport.loop,
       });
     };
 
@@ -80,7 +88,16 @@ export function PlayerCanvas({ layout, song, transport, scheduler, handHints, bo
       cancelAnimationFrame(raf);
       observer.disconnect();
     };
-  }, [transport, scheduler]);
+  }, [transport, scheduler, practice]);
 
-  return <canvas ref={canvasRef} className={className} />;
+  return <canvas ref={canvasRef} className={className} onMouseDown={(e) => e.button === 0 && onHit?.()} />;
+}
+
+function hintFor(practice: Practice): string | null {
+  const s = practice.state;
+  if (s.mode === "record") {
+    return s.waiting ? `Recording ${s.next + 1} of ${s.total}: tap Space or click when you play it` : null;
+  }
+  if (s.mode === "wait" && s.waiting) return "Play it, then press Space or click";
+  return null;
 }

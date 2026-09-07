@@ -4,9 +4,17 @@
 // Song time advances at `rate` × real time while playing. Real time comes
 // from the AudioContext when one exists (it is the clock the synth schedules
 // against) and from performance.now() before audio has been started by a
-// user gesture.
+// user gesture. Tests inject their own clock.
 
 export type TransportListener = () => void;
+
+export interface LoopRegion {
+  a: number;
+  b: number;
+}
+
+/** Shortest loop worth having, in seconds. */
+export const MIN_LOOP = 0.25;
 
 export class Transport {
   private ctx: AudioContext | null = null;
@@ -17,9 +25,12 @@ export class Transport {
   private anchorReal = 0;
   private rate = 1;
   private durationSec = 0;
+  private loopRegion: LoopRegion | null = null;
   private listeners = new Set<TransportListener>();
 
-  /** Called after play, pause, seek, or rate changes. Not on every tick. */
+  constructor(private readonly clock: () => number = () => performance.now() / 1000) {}
+
+  /** Called after play, pause, seek, rate or loop changes. Not on every tick. */
   subscribe(fn: TransportListener): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -45,7 +56,7 @@ export class Transport {
   }
 
   private realNow(): number {
-    return this.ctx ? this.ctx.currentTime : performance.now() / 1000;
+    return this.ctx ? this.ctx.currentTime : this.clock();
   }
 
   /** Current song time in seconds. */
@@ -72,15 +83,20 @@ export class Transport {
     return this.durationSec;
   }
 
+  get loop(): LoopRegion | null {
+    return this.loopRegion;
+  }
+
   setDuration(seconds: number) {
     this.durationSec = Math.max(0, seconds);
     if (this.anchorSong > this.durationSec) this.anchorSong = this.durationSec;
+    this.loopRegion = null;
     this.emit();
   }
 
   play() {
     if (this.playing) return;
-    if (this.anchorSong >= this.durationSec) this.anchorSong = 0;
+    if (this.anchorSong >= this.durationSec) this.anchorSong = this.loopRegion?.a ?? 0;
     this.anchorReal = this.realNow();
     this.playing = true;
     this.emit();
@@ -112,9 +128,35 @@ export class Transport {
     this.emit();
   }
 
-  /** Called by the tick loop: stops at the end of the song. */
+  /** Loop between two song times; order does not matter. Too-short loops are ignored. */
+  setLoop(a: number, b: number): boolean {
+    const lo = Math.max(0, Math.min(a, b));
+    const hi = Math.min(this.durationSec, Math.max(a, b));
+    if (hi - lo < MIN_LOOP) return false;
+    this.loopRegion = { a: lo, b: hi };
+    this.emit();
+    return true;
+  }
+
+  clearLoop() {
+    if (!this.loopRegion) return;
+    this.loopRegion = null;
+    this.emit();
+  }
+
+  /** Called by the tick loop: wraps the loop and stops at the end of the song. */
   tick() {
-    if (this.playing && this.now() >= this.durationSec) {
+    if (!this.playing) return;
+    const t = this.now();
+    if (this.loopRegion && t >= this.loopRegion.b) {
+      // Carry the overshoot so tempo stays steady across the wrap.
+      const over = Math.min(t - this.loopRegion.b, 0.1);
+      this.anchorSong = this.loopRegion.a + over;
+      this.anchorReal = this.realNow();
+      this.emit();
+      return;
+    }
+    if (t >= this.durationSec) {
       this.anchorSong = this.durationSec;
       this.playing = false;
       this.emit();

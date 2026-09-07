@@ -62,6 +62,11 @@ refuses audio otherwise.
 bytes with the top bit set; `midly` truncated them silently. `smf.rs` is
 tested against a real file from the site; keep that fixture.
 
+**Wait mode and recording mute the scheduler.** In those modes the user's
+hit sounds the notes (`practice.ts`); the scheduler must not also play them.
+`Practice` flags its own transport calls as internal so a manual seek is
+told apart from its own pauses and jumps.
+
 **The parser never drops input silently.** Anything `notation.ts` cannot read
 becomes a warning with a line and column. Add a test case with the real
 text whenever a site post trips it.
@@ -72,8 +77,9 @@ text whenever a site post trips it.
 - `src/model/notation.ts` — number-notation parser (tested against real posts).
 - `src/model/song.ts` — song model, uniform timing, JSON coercion.
 - `src/model/capability.ts` — can this kalimba play this song; transpose/fold fixes.
+- `src/model/recording.ts` — hit groups and tap-to-record re-timing (pure, tested).
 - `src/board/geometry.ts` — pure tine geometry (tested). `drawBoard.ts` paints it; `labels.ts` draws printed labels.
-- `src/player/` — `transport.ts` (clock), `synth.ts` (Web Audio voice), `scheduler.ts` (hands notes to the synth ahead of time), `noteLayout.ts` (note → tine), `drawPlayer.ts` (one frame), `PlayerCanvas.tsx` (rAF loop), `TransportBar.tsx`.
+- `src/player/` — `transport.ts` (clock), `synth.ts` (Web Audio voice), `scheduler.ts` (hands notes to the synth ahead of time), `noteLayout.ts` (note → tine), `drawPlayer.ts` (one frame), `PlayerCanvas.tsx` (rAF loop), `practice.ts` (wait mode and recording on top of the transport), `TransportBar.tsx`.
 - `src/presets.ts` — the shipped layouts, imported from `layouts/*.layout.json`.
 - `src/settings.ts`, `src/songs.ts` — persistence via Tauri commands or localStorage.
 - `src/importer.ts` — turns the Rust import result into a Song; `src/model/notationOut.ts` writes notes back as text.

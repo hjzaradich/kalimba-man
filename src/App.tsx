@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { AddSongPanel } from "./AddSongPanel";
 import { LibraryPanel } from "./LibraryPanel";
+import { applyRecordedTiming, groupNotes } from "./model/recording";
 import { songDuration, type Song } from "./model/song";
 import { PlayerCanvas } from "./player/PlayerCanvas";
+import { Practice, type PracticeState } from "./player/practice";
 import { Scheduler } from "./player/scheduler";
 import { Synth } from "./player/synth";
 import { Transport } from "./player/transport";
@@ -22,13 +24,28 @@ export default function App() {
   const [saved, setSaved] = useState<SongSummary[]>([]);
   const [panel, setPanel] = useState<Panel>({ kind: "none" });
   const [handHints, setHandHints] = useState(false);
+  const [metronome, setMetronome] = useState(false);
+  const [practiceState, setPracticeState] = useState<PracticeState>({ mode: "off", waiting: false, next: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
 
   // One transport, one scheduler, one synth for the life of the app.
   const transport = useMemo(() => new Transport(), []);
   const scheduler = useMemo(() => new Scheduler(transport, null, null), [transport]);
   const synthRef = useRef<Synth | null>(null);
+  const songRef = useRef<{ song: Song | null; slug: string | null }>({ song: null, slug: null });
+  songRef.current = { song, slug: songSlug };
+  const recordedRef = useRef<((taps: number[]) => void) | null>(null);
+  const practice = useMemo(
+    () =>
+      new Practice(transport, scheduler, () => synthRef.current, (e) => {
+        setPracticeState(e.state);
+        if (e.type === "recorded") recordedRef.current?.(e.taps);
+      }),
+    [transport, scheduler],
+  );
+  useEffect(() => () => practice.dispose(), [practice]);
 
   const refreshSongs = useCallback(() => {
     listSongs().then(setSaved).catch((e) => setError(String(e)));
@@ -40,13 +57,6 @@ export default function App() {
     refreshSongs();
   }, [refreshSongs]);
 
-  useEffect(() => {
-    scheduler.setSong(song);
-    transport.pause();
-    transport.seek(0);
-    transport.setDuration(song ? songDuration(song) + 1 : 0);
-  }, [song, scheduler, transport]);
-
   /** Audio must start from a user gesture (WKWebView); the first Play is it. */
   const ensureAudio = useCallback(() => {
     if (synthRef.current) return;
@@ -56,12 +66,66 @@ export default function App() {
     transport.attachAudio(ctx);
   }, [scheduler, transport]);
 
-  const togglePlay = useCallback(() => {
+  useEffect(() => {
+    scheduler.setSong(song);
+    practice.setSong(song);
+    transport.pause();
+    transport.seek(0);
+    transport.setDuration(song ? songDuration(song) + 1 : 0);
+  }, [song, scheduler, practice, transport]);
+
+  useEffect(() => {
+    scheduler.setMetronome(metronome);
+  }, [metronome, scheduler]);
+
+  /** Space or a click on the canvas: a hit in wait/record mode, otherwise play/pause. */
+  const hit = useCallback(() => {
+    ensureAudio();
+    void transport.audioContext?.resume();
+    if (practice.hit()) return;
+    if (practice.state.mode === "record") return;
+    if (song) transport.toggle();
+  }, [practice, song, transport, ensureAudio]);
+
+  const setWaitMode = useCallback(
+    (on: boolean) => {
+      practice.setMode(on ? "wait" : "off");
+      setNotice(on ? "Wait mode: playback holds at each note until you play it." : null);
+    },
+    [practice],
+  );
+
+  const startRecording = useCallback(() => {
     if (!song) return;
     ensureAudio();
     void transport.audioContext?.resume();
+    recordedRef.current = (taps) => {
+      const current = songRef.current;
+      if (!current.song) return;
+      try {
+        const retimed = applyRecordedTiming(current.song, groupNotes(current.song.notes), taps);
+        practice.setMode("off");
+        void adopt(retimed, current.slug);
+        setNotice("Rhythm recorded and saved. Play it back to check it.");
+      } catch (e) {
+        setError(String(e));
+      }
+    };
+    practice.setMode("record");
+    setNotice("Recording: tap Space or click the board once for each note, in your own time.");
+  }, [song, practice, transport, ensureAudio]);
+
+  const cancelRecording = useCallback(() => {
+    practice.setMode("off");
+    setNotice("Recording cancelled.");
+  }, [practice]);
+
+  const togglePlay = useCallback(() => {
+    if (!song || practice.state.mode === "record") return;
+    ensureAudio();
+    void transport.audioContext?.resume();
     transport.toggle();
-  }, [song, ensureAudio, transport]);
+  }, [song, ensureAudio, transport, practice]);
 
   const panelOpen = panel.kind !== "none";
 
@@ -70,9 +134,11 @@ export default function App() {
       if (panelOpen) return;
       const target = e.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
-      if (e.code === "Space") {
-        e.preventDefault();
-        togglePlay();
+      if (e.code === "Space" || e.key === " " || e.key === "Spacebar") {
+        e.preventDefault(); // also stops a focused toolbar button from being "clicked" by Space
+        hit();
+      } else if (e.code === "Escape" && practice.state.mode === "record") {
+        cancelRecording();
       } else if (e.code === "Home") {
         transport.seek(0);
       } else if (e.key === "l" || e.key === "L") {
@@ -82,7 +148,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [togglePlay, transport, panelOpen]);
+  }, [hit, transport, panelOpen, practice, cancelRecording]);
 
   /** Store a song under a free slug (or its own), open it, refresh the list. */
   const adopt = useCallback(
@@ -204,7 +270,7 @@ export default function App() {
       </header>
 
       <main className="stage">
-        <PlayerCanvas layout={layout} song={song} transport={transport} scheduler={scheduler} handHints={handHints} className="player-canvas" />
+        <PlayerCanvas layout={layout} song={song} transport={transport} scheduler={scheduler} practice={practice} onHit={hit} handHints={handHints} className="player-canvas" />
         {!song && (
           <div className="stage__empty">
             <p>Import a tab from kalimbatabs.net, or paste one, to start.</p>
@@ -216,7 +282,19 @@ export default function App() {
         {dragging && <div className="dropzone">Drop to import the song file</div>}
       </main>
 
-      <TransportBar transport={transport} enabled={song !== null} onPlayToggle={togglePlay} handHints={handHints} onHandHints={setHandHints} />
+      <TransportBar
+        transport={transport}
+        enabled={song !== null}
+        onPlayToggle={togglePlay}
+        handHints={handHints}
+        onHandHints={setHandHints}
+        metronome={metronome}
+        onMetronome={setMetronome}
+        practice={practiceState}
+        onWaitMode={setWaitMode}
+        onRecord={startRecording}
+        onCancelRecord={cancelRecording}
+      />
 
       <footer className="statusbar">
         <span>
@@ -225,7 +303,7 @@ export default function App() {
           {layout.tines.length} tines
           {layout.draft ? " · draft layout" : ""}
         </span>
-        <span className={error ? "error" : "muted"}>{error ?? (dataDir ? `Data: ${dataDir}` : "Browser preview (songs kept in this browser)")}</span>
+        <span className={error ? "error" : "muted"}>{error ?? notice ?? (dataDir ? `Data: ${dataDir}` : "Browser preview (songs kept in this browser)")}</span>
       </footer>
 
       {panel.kind === "library" && (
