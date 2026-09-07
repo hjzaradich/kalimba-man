@@ -38,12 +38,26 @@ pub struct MidiNote {
     pub pitch: u8,
 }
 
+/** One track of a MIDI file, for the track picker. */
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MidiTrack {
+    pub index: usize,
+    pub name: Option<String>,
+    pub notes: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MidiImport {
     pub bpm: f64,
     pub time_signature: (u8, u8),
+    /// Notes of the chosen track, or of every track merged.
     pub notes: Vec<MidiNote>,
+    /// Every track that has notes, so the user can pick one.
+    pub tracks: Vec<MidiTrack>,
+    /// The track `notes` came from; None when merged.
+    pub track: Option<usize>,
 }
 
 /// What the frontend gets back from `import_url`.
@@ -202,14 +216,46 @@ pub fn looks_like_notes(line: &str) -> bool {
     digits > 0
 }
 
-/// Standard MIDI file → absolute-time notes. Tempo changes are honoured;
-/// all tracks are merged.
-pub fn midi_to_notes(bytes: &[u8]) -> Result<MidiImport, String> {
+/// Standard MIDI file → absolute-time notes. Tempo changes are honoured.
+/// With `track` = None every track is merged; otherwise only that track's
+/// notes are kept (tempo and meter still come from every track, as format-1
+/// files put them in track 0).
+pub fn midi_to_notes(bytes: &[u8], track: Option<usize>) -> Result<MidiImport, String> {
     let file = smf::parse(bytes)?;
+
+    let tracks: Vec<MidiTrack> = file
+        .tracks
+        .iter()
+        .enumerate()
+        .map(|(index, t)| MidiTrack {
+            index,
+            name: t.iter().find_map(|e| match &e.kind {
+                EventKind::TrackName(n) if !n.is_empty() => Some(n.clone()),
+                _ => None,
+            }),
+            notes: t.iter().filter(|e| matches!(e.kind, EventKind::NoteOn { .. })).count(),
+        })
+        .filter(|t| t.notes > 0)
+        .collect();
+    if let Some(t) = track {
+        if !tracks.iter().any(|x| x.index == t) {
+            return Err(format!("track {t} has no notes"));
+        }
+    }
 
     // Merge tracks into one absolute-tick stream; at equal ticks, tempo and
     // time-signature changes come before notes.
-    let mut events: Vec<&smf::Event> = file.tracks.iter().flatten().collect();
+    let mut events: Vec<&smf::Event> = file
+        .tracks
+        .iter()
+        .enumerate()
+        .flat_map(|(i, t)| {
+            t.iter().filter(move |e| match e.kind {
+                EventKind::NoteOn { .. } | EventKind::NoteOff { .. } => track.map_or(true, |x| x == i),
+                _ => true,
+            })
+        })
+        .collect();
     events.sort_by_key(|e| (e.tick, matches!(e.kind, EventKind::NoteOn { .. } | EventKind::NoteOff { .. }) as u8));
 
     // SMPTE files count ticks per second; one "beat" of one second keeps the
@@ -235,6 +281,7 @@ pub fn midi_to_notes(bytes: &[u8]) -> Result<MidiImport, String> {
                 }
             }
             EventKind::TimeSignature(n, d) => time_signature = (n, d),
+            EventKind::TrackName(_) => {}
             EventKind::NoteOn { channel, key, .. } => {
                 // A re-trigger without a note-off closes the previous one.
                 if let Some((start, idx)) = open.remove(&(channel, key)) {
@@ -266,6 +313,8 @@ pub fn midi_to_notes(bytes: &[u8]) -> Result<MidiImport, String> {
         bpm: first_bpm.unwrap_or(120.0),
         time_signature,
         notes,
+        tracks,
+        track,
     })
 }
 
@@ -278,7 +327,7 @@ pub fn import_url(url: &str) -> Result<ImportResult, String> {
 
     let mut warning = None;
     let midi = match &page.midi_url {
-        Some(midi_url) => match fetch(midi_url).and_then(|bytes| midi_to_notes(&bytes)) {
+        Some(midi_url) => match fetch(midi_url).and_then(|bytes| midi_to_notes(&bytes, None)) {
             Ok(m) => Some(m),
             Err(e) => {
                 warning = Some(format!("MIDI import failed ({e}); used the text instead."));
@@ -340,7 +389,11 @@ mod tests {
 
     #[test]
     fn midi_file_becomes_timed_notes() {
-        let m = midi_to_notes(MIDI).unwrap();
+        let m = midi_to_notes(MIDI, None).unwrap();
+        assert_eq!(m.tracks.len(), 1);
+        assert_eq!(m.tracks[0].notes, 150);
+        assert!(midi_to_notes(MIDI, Some(7)).is_err());
+        assert_eq!(midi_to_notes(MIDI, Some(0)).unwrap().notes.len(), 150);
         assert!((m.bpm - 120.0).abs() < 0.01, "bpm {}", m.bpm);
         assert_eq!(m.time_signature, (4, 4));
         assert_eq!(m.notes.len(), 150);

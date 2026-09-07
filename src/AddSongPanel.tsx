@@ -1,5 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
-import { importFromTheoryTab, importFromUrl, songFromImport, songFromTheoryTab, type ImportResult, type TheoryTabImport } from "./importer";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  importFromTheoryTab,
+  importFromUrl,
+  importMidiBytes,
+  likelyMelodyTrack,
+  songFromImport,
+  songFromMidiFile,
+  songFromTheoryTab,
+  type ImportResult,
+  type MidiImport,
+  type TheoryTabImport,
+} from "./importer";
 import { checkCapability } from "./model/capability";
 import { describeFit, refitSong, restoreOriginal } from "./model/fit";
 import type { Layout } from "./model/layout";
@@ -15,7 +26,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Mode = "url" | "theorytab" | "text";
+type Mode = "url" | "theorytab" | "midi" | "text";
 /** How the pure notes are adjusted to the kalimba. Manual carries a fixed shift. */
 type FitMode = { kind: "auto" } | { kind: "keep" } | { kind: "manual"; semitones: number; octaves: number };
 
@@ -39,6 +50,9 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
   // What the import produced, before any fit. Null for paste/edit flows.
   const [imported, setImported] = useState<{ pure: Song; note: string } | null>(null);
   const [tt, setTt] = useState<TheoryTabImport | null>(null);
+  // MIDI file: the bytes stay so a different track can be chosen.
+  const [midi, setMidi] = useState<{ name: string; data: Uint8Array; result: MidiImport } | null>(null);
+  const midiInput = useRef<HTMLInputElement>(null);
   const [ttSections, setTtSections] = useState<string[]>([]);
   const [ttVoice, setTtVoice] = useState(0);
 
@@ -124,6 +138,47 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
   const pureReport = useMemo(() => checkCapability(pure, layout), [pure, layout]);
   const fitText = song.fit ? describeFit({ shift: song.fit.semitones + 12 * song.fit.octaves, ...song.fit }) : null;
 
+  const pickMidi = async (file: File | undefined) => {
+    if (!file) return;
+    setFetching(true);
+    setFetchError(null);
+    try {
+      const data = new Uint8Array(await file.arrayBuffer());
+      const first = await importMidiBytes(data);
+      const track = likelyMelodyTrack(first);
+      const result = track === undefined ? first : await importMidiBytes(data, track);
+      const song = songFromMidiFile(result, file.name);
+      setMidi({ name: file.name, data, result });
+      setTitle(song.title);
+      setArtist("");
+      setBpm(song.bpm);
+      setImported({ pure: song, note: `From ${file.name}: ${result.notes.length} notes, ${result.bpm} BPM${(result.tracks?.length ?? 0) > 1 ? `, track ${trackLabel(result, result.track ?? null)}` : ""}.` });
+      setFitMode({ kind: "auto" });
+      setGenerated(null);
+      setText("");
+      setMode("text");
+    } catch (e) {
+      setFetchError(String(e).replace(/^Error:\s*/, ""));
+    } finally {
+      setFetching(false);
+      if (midiInput.current) midiInput.current.value = "";
+    }
+  };
+
+  const chooseMidiTrack = async (track: number | null) => {
+    if (!midi) return;
+    try {
+      const result = await importMidiBytes(midi.data, track ?? undefined);
+      const song = songFromMidiFile(result, midi.name, { title, artist });
+      setMidi({ ...midi, result });
+      setImported({ pure: song, note: `From ${midi.name}: ${result.notes.length} notes, ${result.bpm} BPM, track ${trackLabel(result, track)}.` });
+      setGenerated(null);
+      setText("");
+    } catch (e) {
+      setFetchError(String(e));
+    }
+  };
+
   const doFetch = async () => {
     setFetching(true);
     setFetchError(null);
@@ -171,6 +226,11 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
 
   const noteCount = song.notes.length;
   const urlMode = mode === "url" || mode === "theorytab";
+  function trackLabel(m: MidiImport, index: number | null): string {
+    if (index === null) return "all merged";
+    const t = m.tracks?.find((x) => x.index === index);
+    return t ? `${t.index + 1}${t.name ? ` “${t.name}”` : ""} (${t.notes} notes)` : String(index + 1);
+  }
   const manual = fitMode.kind === "manual" ? fitMode : null;
 
   return (
@@ -191,9 +251,24 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
             <button className={mode === "theorytab" ? "is-on" : ""} onClick={() => setMode("theorytab")} disabled={!isTauri()} title={isTauri() ? "Melody with real rhythm from a hooktheory.com TheoryTab page" : "Needs the desktop app"}>
               From TheoryTab
             </button>
+            <button className={mode === "midi" ? "is-on" : ""} onClick={() => setMode("midi")} disabled={!isTauri()} title={isTauri() ? "A .mid file from anywhere, with its timing" : "Needs the desktop app"}>
+              MIDI file
+            </button>
             <button className={mode === "text" ? "is-on" : ""} onClick={() => setMode("text")}>
               Paste or type
             </button>
+          </div>
+        )}
+
+        {mode === "midi" && (
+          <div className="urlbox">
+            <button className="primary" onClick={() => midiInput.current?.click()} disabled={fetching}>
+              {fetching ? "Reading…" : "Choose a .mid file…"}
+            </button>
+            <span className="muted">or drop one anywhere on the window</span>
+            <input ref={midiInput} type="file" accept=".mid,.midi,audio/midi" hidden onChange={(e) => void pickMidi(e.target.files?.[0])} />
+            {fetchError && <p className="error">{fetchError}</p>}
+            <p className="muted">Notes keep the file's timing. Files with several tracks get a track picker; the fullest track is chosen first.</p>
           </div>
         )}
 
@@ -222,6 +297,23 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
           <>
             {fetchError && <p className="error">{fetchError}</p>}
             {imported && <p className="notice">{imported.note}</p>}
+            {midi && (midi.result.tracks?.length ?? 0) > 1 && (
+              <div className="notice tt">
+                <div className="tt__row">
+                  <label>
+                    Track
+                    <select value={midi.result.track ?? "all"} onChange={(e) => void chooseMidiTrack(e.target.value === "all" ? null : Number(e.target.value))}>
+                      {midi.result.tracks!.map((t) => (
+                        <option key={t.index} value={t.index}>
+                          {trackLabel(midi.result, t.index)}
+                        </option>
+                      ))}
+                      <option value="all">All tracks merged</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            )}
             {tt && tt.sections.length > 1 && (
               <div className="notice tt">
                 <div className="tt__row">

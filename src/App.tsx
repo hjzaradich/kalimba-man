@@ -19,6 +19,7 @@ import { useUpdater } from "./useUpdater";
 import { PRESET_LAYOUTS, presetById } from "./presets";
 import { DEFAULT_SETTINGS, getDataDir, isTauri, loadSettings, saveSettings, type Settings } from "./settings";
 import { freeSlug, listSongs, readSongFromFile, readSongFromPath, saveSong, type SongSummary } from "./songs";
+import { importMidiPath, likelyMelodyTrack, songFromMidiFile } from "./importer";
 
 type Panel = { kind: "none" } | { kind: "library" } | { kind: "add" } | { kind: "edit"; slug: string; song: Song } | { kind: "layouts" };
 
@@ -252,7 +253,21 @@ export default function App() {
             else if (p.type === "drop") {
               setDragging(false);
               for (const path of p.paths) {
-                if (!path.toLowerCase().endsWith(".json")) continue;
+                const lower = path.toLowerCase();
+                if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
+                  try {
+                    const first = await importMidiPath(path);
+                    const track = likelyMelodyTrack(first);
+                    const m = track === undefined ? first : await importMidiPath(path, track);
+                    const name = path.split(/[\\/]/).pop() ?? "song.mid";
+                    await adopt(refitSong(songFromMidiFile(m, name), layoutRef.current));
+                    setNotice(`Imported ${name}${track !== undefined ? ` (track ${track + 1}; pick another in Edit if needed)` : ""}.`);
+                  } catch (e) {
+                    setError(`Could not import ${path}: ${String(e)}`);
+                  }
+                  continue;
+                }
+                if (!lower.endsWith(".json")) continue;
                 try {
                   if (path.toLowerCase().endsWith(".layout.json")) {
                     const l = await readLayoutFromPath(path);

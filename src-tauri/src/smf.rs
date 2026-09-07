@@ -8,6 +8,8 @@
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum EventKind {
+    /// Meta 0x03, the track's name, when a file has one.
+    TrackName(String),
     Tempo(u32),
     TimeSignature(u8, u8),
     NoteOn { channel: u8, key: u8, velocity: u8 },
@@ -105,6 +107,10 @@ fn parse_track(data: &[u8]) -> (Vec<Event>, bool) {
             }
             let body = &data[next..body_end];
             match kind {
+                0x03 => events.push(Event {
+                    tick,
+                    kind: EventKind::TrackName(String::from_utf8_lossy(body).trim().to_string()),
+                }),
                 0x51 if body.len() >= 3 => events.push(Event {
                     tick,
                     kind: EventKind::Tempo(u32::from_be_bytes([0, body[0], body[1], body[2]])),

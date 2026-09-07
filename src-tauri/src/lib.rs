@@ -274,6 +274,18 @@ async fn import_url(url: String) -> Result<import::ImportResult, String> {
         .map_err(|e| e.to_string())?
 }
 
+/// A MIDI file the user picked (bytes come from the file input) or dropped (a path).
+#[tauri::command]
+fn import_midi(data: Vec<u8>, track: Option<usize>) -> Result<import::MidiImport, String> {
+    import::midi_to_notes(&data, track)
+}
+
+#[tauri::command]
+fn import_midi_path(path: String, track: Option<usize>) -> Result<import::MidiImport, String> {
+    let data = fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+    import::midi_to_notes(&data, track)
+}
+
 #[tauri::command]
 async fn import_theorytab(url: String) -> Result<theorytab::TheoryTabImport, String> {
     tauri::async_runtime::spawn_blocking(move || theorytab::import_theorytab(&url))
@@ -321,6 +333,8 @@ pub fn run() {
             read_song_file,
             import_url,
             import_theorytab,
+            import_midi,
+            import_midi_path,
             list_layouts,
             load_layout,
             save_layout,

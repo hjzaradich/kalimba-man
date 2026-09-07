@@ -9,10 +9,18 @@ import { notationFromNotes } from "./model/notationOut";
 import { DEFAULT_TEXT_BPM, songFromText, type Song } from "./model/song";
 import { isTauri } from "./settings";
 
+export interface MidiTrack {
+  index: number;
+  name?: string | null;
+  notes: number;
+}
+
 export interface MidiImport {
   bpm: number;
   timeSignature: [number, number];
   notes: { time: number; duration: number; pitch: number }[];
+  tracks?: MidiTrack[];
+  track?: number | null;
 }
 
 export interface ImportResult {
@@ -156,4 +164,44 @@ export function songFromTheoryTab(r: TheoryTabImport, layout: Layout, options: T
   fitted.about = `From TheoryTab in ${key}; ${describeFit(fit, first.tonic)}.`;
   unfitted.text = notationFromNotes(unfitted);
   return { song: fitted, fit, key, voiceCount, unfitted };
+}
+
+// ---- MIDI files ---------------------------------------------------------------
+
+export async function importMidiBytes(data: Uint8Array, track?: number): Promise<MidiImport> {
+  if (!isTauri()) throw new Error("Importing a MIDI file needs the desktop app.");
+  return invoke<MidiImport>("import_midi", { data: Array.from(data), track: track ?? null });
+}
+
+export async function importMidiPath(path: string, track?: number): Promise<MidiImport> {
+  return invoke<MidiImport>("import_midi_path", { path, track: track ?? null });
+}
+
+/** The track a kalimba most likely wants: the one with the most notes. */
+export function likelyMelodyTrack(m: MidiImport): number | undefined {
+  const tracks = m.tracks ?? [];
+  if (tracks.length <= 1) return undefined;
+  return [...tracks].sort((a, b) => b.notes - a.notes)[0].index;
+}
+
+/** A measured song from a MIDI file, titled from the file name. */
+export function songFromMidiFile(m: MidiImport, fileName: string, overrides: { title?: string; artist?: string } = {}): Song {
+  const base = fileName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+  const title = (overrides.title ?? base).trim() || "Untitled";
+  const artist = (overrides.artist ?? "").trim() || undefined;
+  const notes = m.notes.map((n) => ({ time: n.time, duration: n.duration, pitch: n.pitch }));
+  const bpm = Math.round(m.bpm * 100) / 100;
+  const song: Song = {
+    version: 1,
+    title,
+    artist,
+    source: { url: `file:${fileName}`, fetchedAt: new Date().toISOString(), kind: "midi" },
+    bpm,
+    timeSignature: m.timeSignature,
+    timing: "measured",
+    notes,
+    sections: [],
+  };
+  song.text = notationFromNotes(song);
+  return song;
 }

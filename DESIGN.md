@@ -184,7 +184,16 @@ No MIDI. Number notation sits in `<p>` blocks inside `.entry-content`,
 interleaved with lyrics. Extract the paragraphs, run the parser, keep the
 lyrics as sections. Timing is `uniform`.
 
-### 6.3 Paste or type
+### 6.3 MIDI files
+
+Any `.mid` file, picked in the Add-song panel or dropped on the window,
+goes through the same reader as the site's MIDI. Files with several tracks
+get a track picker; the fullest track is chosen first, since accompaniment
+tracks are not what a kalimba plays. Timing is `measured`, the title comes
+from the file name, and a drop is fitted automatically with the fit
+recorded (§6.5).
+
+### 6.3a Paste or type
 
 The "Add song" screen always accepts raw text. This is the fallback if the
 site changes or Cloudflare tightens, and it is also the editor.
