@@ -84,6 +84,12 @@ from the page and each section's Hookpad JSON from
 fixtures and let a format change fail the tests. Conversion lives in the
 frontend so the Rust side stays a fetcher.
 
+**Fits are recorded, never baked in.** `refitSong` always starts from
+`song.original` (or the notes themselves when there is no record) and writes
+both the fitted notes and the record. Do not transpose or fold a song's notes
+in place anywhere else; the user must be able to undo it or redo it for a
+different kalimba (`restoreOriginal`, `fittedElsewhere`).
+
 **The parser never drops input silently.** Anything `notation.ts` cannot read
 becomes a warning with a line and column. Add a test case with the real
 text whenever a site post trips it.

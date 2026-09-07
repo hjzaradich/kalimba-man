@@ -29,6 +29,8 @@ export interface PlayerFrame {
   /** What to tell the user while holding. */
   hint?: string | null;
   loop?: { a: number; b: number } | null;
+  /** Extra tine glows, e.g. from clicking a tine. */
+  extraHighlights?: BoardHighlight[];
 }
 
 export interface PlayerTheme {
@@ -41,6 +43,9 @@ export interface PlayerTheme {
   unplayable: string;
   loopLine: string;
   pending: string;
+  /** Tints for the left- and right-thumb halves of the lane. */
+  laneLeft: string;
+  laneRight: string;
 }
 
 export const PLAYER_THEME: PlayerTheme = {
@@ -53,6 +58,8 @@ export const PLAYER_THEME: PlayerTheme = {
   unplayable: "#e0514f",
   loopLine: "rgba(242,178,92,0.6)",
   pending: "#ffffff",
+  laneLeft: "rgba(70,150,255,0.06)",
+  laneRight: "rgba(255,110,70,0.06)",
 };
 
 export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, theme = PLAYER_THEME): BoardGeometry {
@@ -61,6 +68,11 @@ export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, t
 
   ctx.fillStyle = theme.laneBg;
   ctx.fillRect(0, 0, f.width, f.height);
+  // The two halves of the lane, one per thumb.
+  ctx.fillStyle = theme.laneLeft;
+  ctx.fillRect(0, 0, f.width / 2, laneHeight);
+  ctx.fillStyle = theme.laneRight;
+  ctx.fillRect(f.width / 2, 0, f.width / 2, laneHeight);
 
   // Highlights: tines whose notes landed within the last GLOW_SECONDS.
   const highlights: BoardHighlight[] = [];
@@ -75,6 +87,7 @@ export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, t
     }
   }
 
+  if (f.extraHighlights) highlights.push(...f.extraHighlights);
   const geo = drawBoard(ctx, f.layout, f.width, f.boardHeight, laneHeight, highlights);
 
   // Faint lane guides so the eye can follow a lane up from the tip.
@@ -93,14 +106,6 @@ export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, t
   const hitY = laneHeight + geo.hitY;
   // Where a note at song time t has its bottom edge.
   const yFor = (t: number) => hitY - (t - f.now) * pxPerSecond;
-
-  // The hit line itself, drawn across the lane so it reads as the target.
-  ctx.strokeStyle = theme.hitLine;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, hitY);
-  ctx.lineTo(f.width, hitY);
-  ctx.stroke();
 
   const fontSize = labelFontSize(geo.laneWidth);
 

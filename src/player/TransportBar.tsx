@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
+import type { Section } from "../model/song";
 import type { PracticeState } from "./practice";
 import type { Transport } from "./transport";
 
 interface Props {
   transport: Transport;
   enabled: boolean;
+  /** Section markers of the current song, shown as flags on the scrub bar. */
+  sections?: Section[];
   onPlayToggle: () => void;
   handHints: boolean;
   onHandHints: (on: boolean) => void;
@@ -22,7 +25,7 @@ function fmt(seconds: number): string {
 }
 
 /** Every control from DESIGN.md §8. */
-export function TransportBar({ transport, enabled, onPlayToggle, handHints, onHandHints, metronome, onMetronome, practice, onWaitMode, onRecord, onCancelRecord }: Props) {
+export function TransportBar({ transport, enabled, sections = [], onPlayToggle, handHints, onHandHints, metronome, onMetronome, practice, onWaitMode, onRecord, onCancelRecord }: Props) {
   const [, force] = useState(0);
   const [rate, setRate] = useState(transport.playbackRate);
 
@@ -68,6 +71,20 @@ export function TransportBar({ transport, enabled, onPlayToggle, handHints, onHa
           disabled={!enabled || recording}
           onChange={(e) => transport.seek(Number(e.target.value))}
         />
+        {duration > 0 &&
+          sections
+            .filter((s) => s.marker)
+            .map((s, i) => (
+              <button
+                key={i}
+                className="transport__flag"
+                style={{ left: `${(Math.min(s.time, duration) / duration) * 100}%` }}
+                title={`${s.label} · ${fmt(s.time)}`}
+                aria-label={`Jump to ${s.label}`}
+                disabled={!enabled || recording}
+                onClick={() => transport.seek(s.time)}
+              />
+            ))}
         {loop && duration > 0 && (
           <div
             className="transport__loop"

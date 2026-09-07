@@ -6,7 +6,8 @@
 // smallest shift from the original key, the smallest octave move.
 
 import type { Layout } from "./layout";
-import type { Note, Song } from "./song";
+import { notationFromNotes } from "./notationOut";
+import type { Note, Song, SongFit } from "./song";
 
 export interface Fit {
   /** Total shift applied to every note, in semitones. */
@@ -109,4 +110,54 @@ export function describeFit(fit: Fit, tonic?: string): string {
 function normalizeTonic(t: string): string {
   const flats: Record<string, string> = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#", Cb: "B", Fb: "E" };
   return flats[t] ?? t;
+}
+
+/** The notes and chords a fit should start from: the import, never a previous fit. */
+export function pureSource(song: Song): { notes: Note[]; chords?: Song["chords"] } {
+  return song.original ?? { notes: song.notes, chords: song.chords };
+}
+
+/**
+ * Fit a song to a layout and record it. The result plays the fitted notes,
+ * keeps the untouched import in `original`, and describes the fit in `fit`
+ * so it can be redone for another kalimba or undone. `override` fixes the
+ * shift instead of searching.
+ */
+export function refitSong(song: Song, layout: Layout, override?: { semitones: number; octaves: number }): Song {
+  const source = pureSource(song);
+  const pitches = source.notes.map((n) => n.pitch);
+  const fit = override ? evaluateFit(pitches, layout, override.semitones, override.octaves) : bestFit(pitches, layout);
+  const base: Song = { ...song, notes: source.notes, ...(source.chords ? { chords: source.chords } : {}) };
+  const fitted = applyFitToSong(base, fit, layout);
+  const record: SongFit = {
+    layoutId: layout.id,
+    layoutName: layout.name,
+    semitones: fit.semitones,
+    octaves: fit.octaves,
+    folded: fit.folded,
+    unplayable: fit.unplayable,
+    auto: !override,
+  };
+  return {
+    ...fitted,
+    fit: record,
+    original: { notes: source.notes, ...(source.chords ? { chords: source.chords } : {}) },
+    text: notationFromNotes(fitted),
+  };
+}
+
+/** The song as imported: no fit, notes and text back to the original. */
+export function restoreOriginal(song: Song): Song {
+  if (!song.original) return song;
+  const rest = { ...song };
+  delete rest.fit;
+  delete rest.original;
+  const restored: Song = { ...rest, notes: song.original.notes, ...(song.original.chords ? { chords: song.original.chords } : {}) };
+  restored.text = notationFromNotes(restored);
+  return restored;
+}
+
+/** True when the song's notes were fitted for a different kalimba than `layout`. */
+export function fittedElsewhere(song: Song, layout: Layout): boolean {
+  return !!song.fit && song.fit.layoutId !== layout.id;
 }

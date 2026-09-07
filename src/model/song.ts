@@ -38,6 +38,31 @@ export interface Chord {
   pitches: number[];
 }
 
+/**
+ * How a song's notes were adjusted to a kalimba (DESIGN.md §6.5). The
+ * adjusted notes are what plays; `Song.original` keeps the import untouched
+ * so the fit can be redone for another instrument or undone.
+ */
+export interface SongFit {
+  layoutId: string;
+  layoutName: string;
+  /** Key change within an octave, -6..5. */
+  semitones: number;
+  /** Whole-octave move. */
+  octaves: number;
+  /** Notes moved by a further octave to reach a tine. */
+  folded: number;
+  /** Notes no tine could play. */
+  unplayable: number;
+  /** True when the app chose the fit; false when the user overrode it. */
+  auto: boolean;
+}
+
+export interface SongOriginal {
+  notes: Note[];
+  chords?: Chord[];
+}
+
 export interface Song {
   version: 1;
   title: string;
@@ -49,6 +74,10 @@ export interface Song {
   notes: Note[];
   sections: Section[];
   chords?: Chord[];
+  /** The fit applied to `notes`, when they differ from `original`. */
+  fit?: SongFit;
+  /** The notes as imported, before any fit. Present whenever `fit` is. */
+  original?: SongOriginal;
   /** The original notation, kept so the editor can round-trip. */
   text?: string;
   /** Free text about where the notes came from, e.g. the key and the fit applied. */
@@ -168,28 +197,10 @@ export function coerceSong(value: unknown): Song | null {
   if (typeof value !== "object" || value === null) return null;
   const v = value as Record<string, unknown>;
   if (v.version !== 1 || typeof v.title !== "string" || !Array.isArray(v.notes)) return null;
-  const notes: Note[] = [];
-  for (const n of v.notes as unknown[]) {
-    if (typeof n !== "object" || n === null) return null;
-    const x = n as Record<string, unknown>;
-    if (typeof x.time !== "number" || typeof x.duration !== "number" || typeof x.pitch !== "number") return null;
-    notes.push({
-      time: x.time,
-      duration: x.duration,
-      pitch: x.pitch,
-      ...(typeof x.chord === "number" ? { chord: x.chord } : {}),
-      ...(typeof x.tine === "number" ? { tine: x.tine } : {}),
-    });
-  }
+  const notes = coerceNotes(v.notes);
+  if (!notes) return null;
   const timing: Timing = v.timing === "measured" || v.timing === "recorded" ? v.timing : "uniform";
-  const chords: Chord[] | null = Array.isArray(v.chords)
-    ? (v.chords as unknown[]).flatMap((c) => {
-        const y = c as Record<string, unknown>;
-        return typeof y?.time === "number" && typeof y?.duration === "number" && Array.isArray(y.pitches) && (y.pitches as unknown[]).every((p) => typeof p === "number")
-          ? [{ time: y.time, duration: y.duration, pitches: y.pitches as number[] }]
-          : [];
-      })
-    : null;
+  const chords = coerceChords(v.chords);
   const sections: Section[] = Array.isArray(v.sections)
     ? (v.sections as unknown[]).flatMap((s) => {
         const y = s as Record<string, unknown>;
@@ -198,11 +209,14 @@ export function coerceSong(value: unknown): Song | null {
           : [];
       })
     : [];
+  const fit = coerceFit(v.fit);
+  const original = coerceOriginal(v.original);
   return {
     version: 1,
     title: v.title,
     artist: typeof v.artist === "string" ? v.artist : undefined,
     source: isSource(v.source) ? v.source : undefined,
+    ...(fit && original ? { fit, original } : {}),
     bpm: typeof v.bpm === "number" && v.bpm > 0 ? v.bpm : DEFAULT_TEXT_BPM,
     timeSignature: Array.isArray(v.timeSignature) && v.timeSignature.length === 2 ? (v.timeSignature as [number, number]) : [4, 4],
     timing,
@@ -212,6 +226,52 @@ export function coerceSong(value: unknown): Song | null {
     text: typeof v.text === "string" ? v.text : undefined,
     about: typeof v.about === "string" ? v.about : undefined,
   };
+}
+
+function coerceNotes(value: unknown): Note[] | null {
+  if (!Array.isArray(value)) return null;
+  const out: Note[] = [];
+  for (const n of value as unknown[]) {
+    if (typeof n !== "object" || n === null) return null;
+    const x = n as Record<string, unknown>;
+    if (typeof x.time !== "number" || typeof x.duration !== "number" || typeof x.pitch !== "number") return null;
+    out.push({ time: x.time, duration: x.duration, pitch: x.pitch, ...(typeof x.chord === "number" ? { chord: x.chord } : {}), ...(typeof x.tine === "number" ? { tine: x.tine } : {}) });
+  }
+  return out;
+}
+
+function coerceChords(value: unknown): Chord[] | null {
+  if (!Array.isArray(value)) return null;
+  return (value as unknown[]).flatMap((c) => {
+    const y = c as Record<string, unknown>;
+    return typeof y?.time === "number" && typeof y?.duration === "number" && Array.isArray(y.pitches) && (y.pitches as unknown[]).every((p) => typeof p === "number")
+      ? [{ time: y.time, duration: y.duration, pitches: y.pitches as number[] }]
+      : [];
+  });
+}
+
+function coerceFit(value: unknown): SongFit | null {
+  if (typeof value !== "object" || value === null) return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.layoutId !== "string" || typeof v.semitones !== "number" || typeof v.octaves !== "number") return null;
+  return {
+    layoutId: v.layoutId,
+    layoutName: typeof v.layoutName === "string" ? v.layoutName : v.layoutId,
+    semitones: v.semitones,
+    octaves: v.octaves,
+    folded: typeof v.folded === "number" ? v.folded : 0,
+    unplayable: typeof v.unplayable === "number" ? v.unplayable : 0,
+    auto: v.auto !== false,
+  };
+}
+
+function coerceOriginal(value: unknown): SongOriginal | null {
+  if (typeof value !== "object" || value === null) return null;
+  const v = value as Record<string, unknown>;
+  const notes = coerceNotes(v.notes);
+  if (!notes) return null;
+  const chords = coerceChords(v.chords);
+  return { notes, ...(chords ? { chords } : {}) };
 }
 
 function isSource(s: unknown): s is SongSource {

@@ -233,8 +233,17 @@ Melodies come in any key and range. The import picks the transposition
 3. Otherwise, the one that leaves the fewest unplayable notes, then the
    fewest folds, then the smallest shift.
 
-The user sees the chosen shift and can override it in the Add-song panel,
-where the existing "keep in red / transpose / fold" choices remain.
+The user sees the chosen shift and can override it in the Add-song panel
+(automatic, manual, or none).
+
+A fit never destroys the import. The song file keeps the notes as imported
+in `original` and describes the adjustment in `fit` (which kalimba it was
+for, the shift, how many notes were folded or left unplayable, and whether
+the app or the user chose it). The fitted notes are what plays. Switching to
+another kalimba shows a banner offering to refit from the original or to
+restore it, so a song fitted to a 17-key regains its sharps on a chromatic
+instrument. Editing the text makes the text the new original and drops the
+record.
 
 ### 6.6 Capability check
 

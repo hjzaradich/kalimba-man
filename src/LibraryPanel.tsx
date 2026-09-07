@@ -10,6 +10,8 @@ interface Props {
   onEdit: (slug: string, song: Song) => void;
   onImportFile: (song: Song) => void;
   onChanged: () => void;
+  /** A song file was deleted; the app unloads it if it was open. */
+  onDeleted?: (slug: string) => void;
   onAdd: () => void;
   onClose: () => void;
 }
@@ -21,7 +23,7 @@ const TIMING_LABEL: Record<string, string> = {
 };
 
 /** The library: every song file in the data folder. DESIGN.md roadmap phase 2. */
-export function LibraryPanel({ songs, currentSlug, onOpen, onEdit, onImportFile, onChanged, onAdd, onClose }: Props) {
+export function LibraryPanel({ songs, currentSlug, onOpen, onEdit, onImportFile, onChanged, onDeleted, onAdd, onClose }: Props) {
   const [query, setQuery] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,7 @@ export function LibraryPanel({ songs, currentSlug, onOpen, onEdit, onImportFile,
       await deleteSong(slug);
       setConfirmDelete(null);
       onChanged();
+      onDeleted?.(slug);
     } catch (e) {
       setError(String(e));
     }

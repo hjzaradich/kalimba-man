@@ -1,7 +1,7 @@
 // Turns what the Rust importer fetched into a Song. DESIGN.md §6.
 
 import { invoke } from "@tauri-apps/api/core";
-import { applyFitToSong, bestFit, describeFit, evaluateFit, type Fit } from "./model/fit";
+import { describeFit, refitSong, type Fit } from "./model/fit";
 import { concatSections, convertSection, parseHookpad, voices, type ConvertedSection } from "./model/hookpad";
 import type { Layout } from "./model/layout";
 import { parseNotation, type ParseResult } from "./model/notation";
@@ -151,10 +151,9 @@ export function songFromTheoryTab(r: TheoryTabImport, layout: Layout, options: T
     chords,
   };
 
-  const pitches = notes.map((n) => n.pitch);
-  const fit = options.fit ? evaluateFit(pitches, layout, options.fit.semitones, options.fit.octaves) : bestFit(pitches, layout);
-  const fitted = applyFitToSong(unfitted, fit, layout);
-  fitted.text = notationFromNotes(fitted);
+  const fitted = refitSong(unfitted, layout, options.fit);
+  const fit: Fit = { shift: fitted.fit!.semitones + 12 * fitted.fit!.octaves, ...fitted.fit! };
   fitted.about = `From TheoryTab in ${key}; ${describeFit(fit, first.tonic)}.`;
+  unfitted.text = notationFromNotes(unfitted);
   return { song: fitted, fit, key, voiceCount, unfitted };
 }

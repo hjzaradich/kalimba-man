@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef } from "react";
 import type { Layout } from "../model/layout";
 import type { Song } from "../model/song";
 import { drawPlayerFrame } from "./drawPlayer";
+import { tineAt } from "../board/hitTest";
+import type { BoardGeometry } from "../board/geometry";
 import { placeNotes } from "./noteLayout";
 import type { Transport } from "./transport";
 import type { Scheduler } from "./scheduler";
@@ -13,8 +15,10 @@ interface Props {
   transport: Transport;
   scheduler: Scheduler;
   practice: Practice;
-  /** Left click on the canvas: a hit in wait/record mode. */
+  /** Left click in the lane: a hit in wait/record mode, otherwise play/pause. */
   onHit?: () => void;
+  /** Left click on a tine: play it. Return true to also flash the tine. */
+  onTine?: (tineIndex: number) => boolean | void;
   handHints?: boolean;
   /** Fraction of the canvas height given to the board. */
   boardFraction?: number;
@@ -26,8 +30,13 @@ interface Props {
  * Redraws every animation frame from the transport's clock and drives the
  * audio scheduler from the same loop.
  */
-export function PlayerCanvas({ layout, song, transport, scheduler, practice, onHit, handHints, boardFraction = 0.46, className }: Props) {
+/** How long a clicked tine glows, in seconds. */
+const FLASH_SECONDS = 0.35;
+
+export function PlayerCanvas({ layout, song, transport, scheduler, practice, onHit, onTine, handHints, boardFraction = 0.46, className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const geoRef = useRef<{ geo: BoardGeometry; laneHeight: number } | null>(null);
+  const flashes = useRef<{ tine: number; at: number }[]>([]);
   const placements = useMemo(() => (song ? placeNotes(song, layout) : []), [song, layout]);
 
   // Keep the latest props in a ref so the single rAF loop never goes stale.
@@ -65,19 +74,24 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
       const dpr = window.devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const f = frameRef.current;
-      drawPlayerFrame(ctx, {
+      const nowReal = performance.now() / 1000;
+      flashes.current = flashes.current.filter((x) => nowReal - x.at < FLASH_SECONDS);
+      const boardHeight = Math.round(height * f.boardFraction);
+      const geo = drawPlayerFrame(ctx, {
         layout: f.layout,
         song: f.song,
         placements: f.placements,
         now: transport.now(),
         width,
         height,
-        boardHeight: Math.round(height * f.boardFraction),
+        boardHeight,
         handHints: f.handHints,
         pending: practice.pendingNotes,
         hint: hintFor(practice) ?? leadInHint(transport.now(), transport.isPlaying),
         loop: transport.loop,
+        extraHighlights: flashes.current.map((x) => ({ tine: x.tine, strength: 1 - (nowReal - x.at) / FLASH_SECONDS })),
       });
+      geoRef.current = { geo, laneHeight: height - boardHeight };
     };
 
     resize();
@@ -90,7 +104,25 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
     };
   }, [transport, scheduler, practice]);
 
-  return <canvas ref={canvasRef} className={className} onMouseDown={(e) => e.button === 0 && onHit?.()} />;
+  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0) return;
+    const g = geoRef.current;
+    if (g) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top - g.laneHeight;
+      if (y >= 0) {
+        const tine = tineAt(g.geo, x, y);
+        if (tine !== null) {
+          if (onTine?.(tine) !== false) flashes.current.push({ tine, at: performance.now() / 1000 });
+          return;
+        }
+      }
+    }
+    onHit?.();
+  };
+
+  return <canvas ref={canvasRef} className={className} onMouseDown={onMouseDown} />;
 }
 
 /** Countdown during the silent lead-in before the first note. */

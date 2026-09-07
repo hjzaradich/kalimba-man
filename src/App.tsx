@@ -5,6 +5,7 @@ import { LayoutPanel } from "./LayoutPanel";
 import { LibraryPanel } from "./LibraryPanel";
 import { freeLayoutSlug, listLayouts, loadLayout, readLayoutFromFile, readLayoutFromPath, saveLayout, type LayoutSummary } from "./layouts";
 import type { Layout } from "./model/layout";
+import { describeFit, fittedElsewhere, refitSong, restoreOriginal } from "./model/fit";
 import { applyRecordedTiming, groupNotes } from "./model/recording";
 import { songDuration, type Song } from "./model/song";
 import { PlayerCanvas } from "./player/PlayerCanvas";
@@ -44,6 +45,7 @@ export default function App() {
   const synthRef = useRef<Synth | null>(null);
   const songRef = useRef<{ song: Song | null; slug: string | null }>({ song: null, slug: null });
   songRef.current = { song, slug: songSlug };
+  const layoutRef = useRef<Layout>(presetById(DEFAULT_SETTINGS.layoutId)!);
   const recordedRef = useRef<((taps: number[]) => void) | null>(null);
   const practice = useMemo(
     () =>
@@ -118,6 +120,23 @@ export default function App() {
     if (practice.state.mode === "record") return;
     if (song) transport.toggle();
   }, [practice, song, transport, ensureAudio]);
+
+  /** A tine was clicked: in a hold, that is the hit; otherwise just sound it. */
+  const playTine = useCallback(
+    (index: number) => {
+      ensureAudio();
+      void transport.audioContext?.resume();
+      if (practice.state.waiting) {
+        practice.hit();
+        return true;
+      }
+      const ctx = transport.audioContext;
+      const pitch = layoutRef.current.tines[index]?.pitch;
+      if (ctx && synthRef.current && pitch !== undefined) synthRef.current.pluck(pitch, ctx.currentTime);
+      return true;
+    },
+    [practice, transport, ensureAudio],
+  );
 
   const setWaitMode = useCallback(
     (on: boolean) => {
@@ -289,6 +308,7 @@ export default function App() {
   if (!settings) return <div className="app app--loading">Loading…</div>;
 
   const layout = presetById(settings.layoutId) ?? (userLayout && userLayout.id === settings.layoutId ? userLayout : null) ?? presetById(DEFAULT_SETTINGS.layoutId)!;
+  layoutRef.current = layout;
 
   const chooseLayout = (layoutId: string) => {
     const next = { ...settings, layoutId };
@@ -297,6 +317,22 @@ export default function App() {
   };
 
   const closePanel = () => setPanel({ kind: "none" });
+
+  /** Redo the recorded fit for the selected kalimba, or drop it. */
+  const refit = (mode: "refit" | "original") => {
+    if (!song) return;
+    const next = mode === "refit" ? refitSong(song, layout) : restoreOriginal(song);
+    void adopt(next, songSlug);
+    setNotice(mode === "refit" && next.fit ? `Refitted for ${layout.name}: ${describeFit({ shift: next.fit.semitones + 12 * next.fit.octaves, ...next.fit })}.` : "Original notes restored.");
+  };
+
+  const unload = () => {
+    practice.setMode("off");
+    setSong(null);
+    setSongSlug(null);
+    setNotice(null);
+    setError(null);
+  };
 
   return (
     <div className={`app${dragging ? " is-dragging" : ""}`}>
@@ -349,9 +385,25 @@ export default function App() {
       </header>
 
       <UpdateBanner updater={updater} />
+      {song && fittedElsewhere(song, layout) && (
+        <div className="fit-banner">
+          <span>
+            This song was fitted for <strong>{song.fit!.layoutName}</strong>
+            {checkUnplayable(song, layout)}.
+          </span>
+          <span className="update-banner__actions">
+            <button onClick={() => refit("original")} title="Back to the notes as imported">
+              Original notes
+            </button>
+            <button className="primary" onClick={() => refit("refit")}>
+              Refit for {layout.name}
+            </button>
+          </span>
+        </div>
+      )}
 
       <main className="stage">
-        <PlayerCanvas layout={layout} song={song} transport={transport} scheduler={scheduler} practice={practice} onHit={hit} handHints={handHints} className="player-canvas" />
+        <PlayerCanvas layout={layout} song={song} transport={transport} scheduler={scheduler} practice={practice} onHit={hit} onTine={playTine} handHints={handHints} className="player-canvas" />
         {!song && (
           <div className="stage__empty">
             <p>Import a tab from kalimbatabs.net, or paste one, to start.</p>
@@ -366,6 +418,7 @@ export default function App() {
       <TransportBar
         transport={transport}
         enabled={song !== null}
+        sections={song?.sections}
         onPlayToggle={togglePlay}
         handHints={handHints}
         onHandHints={setHandHints}
@@ -403,6 +456,9 @@ export default function App() {
           }}
           onChanged={() => {
             refreshSongs();
+          }}
+          onDeleted={(slug) => {
+            if (slug === songSlug) unload();
           }}
           onAdd={() => setPanel({ kind: "add" })}
           onClose={closePanel}
@@ -444,6 +500,13 @@ export default function App() {
       )}
     </div>
   );
+}
+
+import { checkCapability } from "./model/capability";
+
+function checkUnplayable(song: Song, layout: Layout): string {
+  const n = checkCapability(song, layout).unplayable.length;
+  return n ? `; ${n} of its notes are not on this kalimba` : "";
 }
 
 function timingLabel(song: Song): string {

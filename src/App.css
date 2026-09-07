@@ -713,3 +713,77 @@ button.linkish {
 button.linkish:hover:not(:disabled) {
   text-decoration: underline;
 }
+
+/* Section flags on the scrub bar */
+
+.transport__seekwrap {
+  padding-top: 8px;
+}
+
+.transport__flag {
+  position: absolute;
+  top: -2px;
+  width: 0;
+  height: 0;
+  padding: 0;
+  margin-left: -6px;
+  background: none;
+  border-style: solid;
+  border-width: 9px 6px 0 6px;
+  border-color: var(--accent) transparent transparent transparent;
+  border-radius: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.transport__flag:hover:not(:disabled) {
+  border-top-color: #ffd58a;
+}
+
+.transport__flag:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Fit controls and banner */
+
+.fitbox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.fitbox__label {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fitbox label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fitbox__manual {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fit-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  font-size: 13px;
+  background: rgba(124, 192, 255, 0.1);
+  border-bottom: 1px solid rgba(124, 192, 255, 0.35);
+}

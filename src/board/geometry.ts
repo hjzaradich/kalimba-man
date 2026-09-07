@@ -64,8 +64,11 @@ const BOTTOM_PAD = 0.05;
 const TIP_SPREAD = 0.44;
 /** Distance between the tips of adjacent tiers in one column, as a fraction of height. */
 const TIP_STEP = 0.12;
-/** Space above the bridge line, as a fraction of height. */
-const TOP_PAD = 0.06;
+/**
+ * Space above the bridge line, as a fraction of height. Zero: the bridge is
+ * the top edge of the board and nothing of the instrument shows above it.
+ */
+const TOP_PAD = 0;
 /** Tine metal width as a fraction of the lane. */
 const TINE_WIDTH = 0.42;
 

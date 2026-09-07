@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { importFromTheoryTab, importFromUrl, songFromImport, songFromTheoryTab, type ImportResult, type TheoryTabImport } from "./importer";
-import { bestTransposition, checkCapability, foldOctaves } from "./model/capability";
-import { describeFit } from "./model/fit";
+import { checkCapability } from "./model/capability";
+import { describeFit, refitSong, restoreOriginal } from "./model/fit";
 import type { Layout } from "./model/layout";
 import { parseNotation, summarize, type NoteEvent } from "./model/notation";
-import { DEFAULT_TEXT_BPM, notesFromEvents, songFromText, transpose, type Song } from "./model/song";
+import { DEFAULT_TEXT_BPM, songFromText, type Song } from "./model/song";
 import { isTauri } from "./settings";
 
 interface Props {
@@ -16,13 +16,18 @@ interface Props {
 }
 
 type Mode = "url" | "theorytab" | "text";
-type Fix = "keep" | "transpose" | "fold";
+/** How the pure notes are adjusted to the kalimba. Manual carries a fixed shift. */
+type FitMode = { kind: "auto" } | { kind: "keep" } | { kind: "manual"; semitones: number; octaves: number };
 
 /**
- * The Add-song screen (DESIGN.md §6) and, with `existing`, the text editor
- * (§10). Import from a kalimbatabs.net URL, a TheoryTab URL, or paste
- * notation; edit the text with live parsing; fix notes the kalimba lacks;
- * save to the library.
+ * The Add-song screen (DESIGN.md §6) and, with `existing`, the editor (§10).
+ *
+ * Two stages. First a *pure* song: the import as it came (kalimbatabs text
+ * or MIDI, a TheoryTab analysis, an existing song's original, or the text
+ * typed here). Then a *fit* to the selected kalimba (§6.5): automatic,
+ * manual, or none. The fitted notes are what plays; the pure notes are kept
+ * on the song so the fit can be redone for another kalimba or undone.
+ * Editing the text makes the text the new pure song.
  */
 export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
   const editing = !!existing;
@@ -30,19 +35,22 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
   const [url, setUrl] = useState("");
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [imported, setImported] = useState<ImportResult | null>(null);
 
-  // TheoryTab state: the raw import plus the user's choices.
+  // What the import produced, before any fit. Null for paste/edit flows.
+  const [imported, setImported] = useState<{ pure: Song; note: string } | null>(null);
   const [tt, setTt] = useState<TheoryTabImport | null>(null);
   const [ttSections, setTtSections] = useState<string[]>([]);
   const [ttVoice, setTtVoice] = useState(0);
-  const [ttFit, setTtFit] = useState<{ semitones: number; octaves: number } | null>(null);
 
   const [title, setTitle] = useState(existing?.title ?? "");
   const [artist, setArtist] = useState(existing?.artist ?? "");
   const [bpm, setBpm] = useState(existing?.bpm ?? DEFAULT_TEXT_BPM);
   const [text, setText] = useState(existing?.text ?? "");
-  const [fix, setFix] = useState<Fix>("keep");
+  /** The text last generated from a fit; while `text` equals it, the text is derived, not edited. */
+  const [generated, setGenerated] = useState<string | null>(existing?.text ?? null);
+  const [fitMode, setFitMode] = useState<FitMode>(() =>
+    existing?.fit ? (existing.fit.auto ? { kind: "auto" } : { kind: "manual", semitones: existing.fit.semitones, octaves: existing.fit.octaves }) : { kind: editing ? "keep" : "auto" },
+  );
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -53,67 +61,68 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const textEdited = generated === null ? text.trim() !== "" : text !== generated;
   const parsed = useMemo(() => parseNotation(text), [text]);
+  const meta = useMemo(() => ({ title: title.trim() || "Untitled", artist: artist.trim() || undefined }), [title, artist]);
 
-  /** The TheoryTab build for the current choices, or null when not in that flow. */
-  const ttBuild = useMemo(() => {
-    if (!tt) return null;
+  // TheoryTab: rebuild the pure song when the section or voice choice changes.
+  useEffect(() => {
+    if (!tt) return;
     try {
-      return songFromTheoryTab(tt, layout, {
-        sectionIds: ttSections,
-        voice: ttVoice,
-        fit: ttFit ?? undefined,
-        title: title || undefined,
-        artist: artist || undefined,
-      });
+      const b = songFromTheoryTab(tt, layout, { sectionIds: ttSections, voice: ttVoice, title: meta.title, artist: meta.artist });
+      setImported({ pure: b.unfitted, note: `From TheoryTab, ${b.key}${b.voiceCount > 1 ? `, ${b.voiceCount} voices` : ""}.` });
+      setBpm(b.unfitted.bpm);
     } catch (e) {
       setFetchError(`Could not read the analysis: ${String(e)}`);
-      return null;
     }
-  }, [tt, ttSections, ttVoice, ttFit, layout, title, artist]);
+    // meta and layout are applied later; only the analysis choices matter here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tt, ttSections, ttVoice]);
 
-  /**
-   * The song as it would be saved. Measured timing survives an edit as long
-   * as the note count is unchanged (relabelling pitches); otherwise the text
-   * is re-timed uniformly.
-   */
-  const { base, retimed } = useMemo(() => {
-    const meta = { title: title.trim() || "Untitled", artist: artist.trim() || undefined, bpm };
-    const measuredSource =
-      ttBuild?.song ?? (imported?.kind === "midi" && imported.midi ? songFromImport(imported, meta).song : existing?.timing === "measured" ? existing : null);
-    if (measuredSource) {
-      const pitches = parsed.events.filter((e): e is NoteEvent => e.kind === "note").flatMap((e) => e.pitches);
-      if (pitches.length === measuredSource.notes.length) {
-        const notes = measuredSource.notes.map((n, i) => ({ ...n, pitch: pitches[i] }));
-        const song: Song = { ...measuredSource, ...meta, bpm: ttBuild ? measuredSource.bpm : bpm, notes, text, sections: notesFromEvents(parsed.events, { bpm }).sections.length ? measuredSource.sections : measuredSource.sections };
-        return { base: song, retimed: false };
-      }
-      const song = songFromText(text, meta, parsed.events);
-      song.source = measuredSource.source;
-      return { base: song, retimed: true };
+  /** Stage one: the pure song. */
+  const pure = useMemo((): Song => {
+    if (imported && !textEdited) {
+      return { ...imported.pure, ...meta };
     }
-    const song = songFromText(text, meta, parsed.events);
-    song.source = imported ? { url: imported.sourceUrl, fetchedAt: new Date().toISOString(), kind: "text" } : existing?.source;
-    if (existing?.timing === "recorded") song.timing = "uniform";
-    return { base: song, retimed: existing?.timing === "recorded" };
-  }, [text, title, artist, bpm, parsed, imported, existing, ttBuild]);
+    // Text is the source. Keep measured timing when only pitches changed.
+    const measured = existing && existing.timing === "measured" ? restoreOriginal(existing) : imported?.pure.timing === "measured" ? imported.pure : null;
+    const pitches = parsed.events.filter((e): e is NoteEvent => e.kind === "note").flatMap((e) => e.pitches);
+    if (measured && !textEdited && existing) {
+      return { ...measured, ...meta };
+    }
+    if (measured && pitches.length === measured.notes.length) {
+      const rest = { ...measured };
+      delete rest.fit;
+      delete rest.original;
+      return { ...rest, ...meta, notes: measured.notes.map((n, i) => ({ ...n, pitch: pitches[i] })), text };
+    }
+    const song = songFromText(text, { ...meta, bpm }, parsed.events);
+    song.source = imported?.pure.source ?? existing?.source;
+    return song;
+  }, [imported, textEdited, meta, existing, parsed, text, bpm]);
 
-  const report = useMemo(() => checkCapability(base, layout), [base, layout]);
-  const suggestion = useMemo(() => (report.unplayable.length ? bestTransposition(base, layout) : null), [base, layout, report]);
-  const song = useMemo(() => {
-    if (fix === "transpose" && suggestion) return transpose(base, suggestion.semitones);
-    if (fix === "fold") return foldOctaves(base, layout);
-    return base;
-  }, [base, fix, suggestion, layout]);
-  const remaining = useMemo(() => checkCapability(song, layout).unplayable.length, [song, layout]);
+  const retimed = textEdited && (existing?.timing === "measured" || existing?.timing === "recorded" || imported?.pure.timing === "measured") && pure.timing === "uniform";
 
-  // When the TheoryTab build changes, the text follows it (the build owns the notes).
+  /** Stage two: the fit. */
+  const song = useMemo((): Song => {
+    if (fitMode.kind === "keep") return restoreOriginal(pure);
+    return refitSong(pure, layout, fitMode.kind === "manual" ? { semitones: fitMode.semitones, octaves: fitMode.octaves } : undefined);
+  }, [pure, fitMode, layout]);
+
+  // Derived text follows the fitted song until the user edits it.
   useEffect(() => {
-    if (ttBuild) {
-      setText(ttBuild.song.text ?? "");
-      setBpm(ttBuild.song.bpm);
+    if (textEdited) return;
+    const next = song.text ?? "";
+    if (next !== text) {
+      setText(next);
+      setGenerated(next);
     }
-  }, [ttBuild]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [song]);
+
+  const report = useMemo(() => checkCapability(song, layout), [song, layout]);
+  const pureReport = useMemo(() => checkCapability(pure, layout), [pure, layout]);
+  const fitText = song.fit ? describeFit({ shift: song.fit.semitones + 12 * song.fit.octaves, ...song.fit }) : null;
 
   const doFetch = async () => {
     setFetching(true);
@@ -121,22 +130,26 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
     try {
       if (mode === "theorytab") {
         const r = await importFromTheoryTab(url);
+        setTitle(r.title);
+        setArtist(r.artist ?? "");
         setTt(r);
         setTtSections(r.sections.map((s) => s.id));
         setTtVoice(0);
-        setTtFit(null);
-        setTitle(r.title);
-        setArtist(r.artist ?? "");
+        setFitMode({ kind: "auto" });
+        setGenerated(null);
+        setText("");
         setMode("text");
         if (r.failed.length) setFetchError(`Some sections could not be fetched: ${r.failed.join("; ")}`);
       } else {
-        const r = await importFromUrl(url);
-        setImported(r);
+        const r: ImportResult = await importFromUrl(url);
         const built = songFromImport(r);
         setTitle(built.song.title);
         setArtist(built.song.artist ?? "");
         setBpm(built.song.bpm);
-        setText(built.song.text ?? "");
+        setImported({ pure: built.song, note: `Imported from ${r.sourceUrl}${r.kind === "midi" ? " with timing from MIDI." : " as text, one beat per note."}${r.warning ? ` ${r.warning}` : ""}` });
+        setFitMode({ kind: "auto" });
+        setGenerated(null);
+        setText("");
         setMode("text");
       }
     } catch (e) {
@@ -158,6 +171,7 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
 
   const noteCount = song.notes.length;
   const urlMode = mode === "url" || mode === "theorytab";
+  const manual = fitMode.kind === "manual" ? fitMode : null;
 
   return (
     <div className="panel-backdrop" onClick={onClose}>
@@ -198,7 +212,7 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
             {fetchError && <p className="error">{fetchError}</p>}
             <p className="muted">
               {mode === "theorytab"
-                ? "TheoryTab analyses carry the melody with its rhythm and key. The app transposes it to fit your kalimba and tells you what it did."
+                ? "TheoryTab analyses carry the melody with its rhythm and key. The import is kept as is; the fit to your kalimba is recorded separately and can be redone or undone."
                 : "Newer posts come with exact timing from the site's MIDI. Older posts are text only and get one beat per note."}
             </p>
           </div>
@@ -206,75 +220,32 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
 
         {mode === "text" && (
           <>
-            {imported && (
-              <p className="notice">
-                Imported from {imported.sourceUrl}
-                {imported.kind === "midi" ? " with timing from MIDI." : " as text, one beat per note."}
-                {imported.warning ? ` ${imported.warning}` : ""}
-              </p>
-            )}
-            {tt && ttBuild && (
+            {fetchError && <p className="error">{fetchError}</p>}
+            {imported && <p className="notice">{imported.note}</p>}
+            {tt && tt.sections.length > 1 && (
               <div className="notice tt">
-                <p>
-                  From TheoryTab, {ttBuild.key}. Fit: <strong>{describeFit(ttBuild.fit, ttBuild.key.split(" ")[0])}</strong>.
-                </p>
                 <div className="tt__row">
-                  {tt.sections.length > 1 && (
-                    <span className="tt__sections">
-                      Sections:
-                      {tt.sections.map((s) => (
-                        <label key={s.id}>
-                          <input
-                            type="checkbox"
-                            checked={ttSections.includes(s.id)}
-                            onChange={(e) => setTtSections(e.target.checked ? tt.sections.filter((x) => x.id === s.id || ttSections.includes(x.id)).map((x) => x.id) : ttSections.filter((id) => id !== s.id))}
-                          />
-                          {s.name}
-                        </label>
-                      ))}
-                    </span>
-                  )}
-                  {ttBuild.voiceCount > 1 && (
-                    <label>
-                      Voice
-                      <select value={ttVoice} onChange={(e) => setTtVoice(Number(e.target.value))}>
-                        {Array.from({ length: ttBuild.voiceCount }, (_, i) => (
-                          <option key={i} value={i}>
-                            {i === 0 ? "Melody" : `Voice ${i + 1}`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                  <label>
-                    Transpose
-                    <select value={ttFit ? ttFit.semitones : "auto"} onChange={(e) => setTtFit(e.target.value === "auto" ? null : { semitones: Number(e.target.value), octaves: ttFit?.octaves ?? ttBuild.fit.octaves })}>
-                      <option value="auto">automatic</option>
-                      {Array.from({ length: 12 }, (_, i) => i - 6).map((k) => (
-                        <option key={k} value={k}>
-                          {k > 0 ? `+${k}` : k} semitones
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Octave
-                    <select value={ttFit ? ttFit.octaves : "auto"} onChange={(e) => setTtFit(e.target.value === "auto" ? null : { semitones: ttFit?.semitones ?? ttBuild.fit.semitones, octaves: Number(e.target.value) })}>
-                      <option value="auto">automatic</option>
-                      {[-2, -1, 0, 1, 2].map((o) => (
-                        <option key={o} value={o}>
-                          {o > 0 ? `+${o}` : o}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <span className="tt__sections">
+                    Sections:
+                    {tt.sections.map((s) => (
+                      <label key={s.id}>
+                        <input
+                          type="checkbox"
+                          checked={ttSections.includes(s.id)}
+                          onChange={(e) => setTtSections(tt.sections.filter((x) => (x.id === s.id ? e.target.checked : ttSections.includes(x.id))).map((x) => x.id))}
+                        />
+                        {s.name}
+                      </label>
+                    ))}
+                  </span>
                 </div>
               </div>
             )}
+
             <div className="panel__fields">
               <label>
                 Title
-                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Song title" autoFocus={!imported && !tt} />
+                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Song title" autoFocus={!imported} />
               </label>
               <label>
                 Artist
@@ -282,7 +253,42 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
               </label>
               <label>
                 BPM
-                <input type="number" min={20} max={300} value={bpm} disabled={!!ttBuild} onChange={(e) => setBpm(Math.max(20, Math.min(300, Number(e.target.value) || DEFAULT_TEXT_BPM)))} />
+                <input type="number" min={20} max={300} value={bpm} disabled={pure.timing === "measured"} onChange={(e) => setBpm(Math.max(20, Math.min(300, Number(e.target.value) || DEFAULT_TEXT_BPM)))} />
+              </label>
+            </div>
+
+            <div className="fitbox">
+              <span className="fitbox__label">Fit to {layout.name}</span>
+              <label>
+                <input type="radio" checked={fitMode.kind === "auto"} onChange={() => setFitMode({ kind: "auto" })} />
+                Automatic{fitMode.kind === "auto" && fitText ? `: ${fitText}` : ""}
+              </label>
+              <label>
+                <input type="radio" checked={fitMode.kind === "manual"} onChange={() => setFitMode({ kind: "manual", semitones: song.fit?.semitones ?? 0, octaves: song.fit?.octaves ?? 0 })} />
+                Manual
+              </label>
+              {manual && (
+                <span className="fitbox__manual">
+                  <select value={manual.semitones} onChange={(e) => setFitMode({ ...manual, semitones: Number(e.target.value) })} title="Key shift within an octave">
+                    {Array.from({ length: 12 }, (_, i) => i - 6).map((k) => (
+                      <option key={k} value={k}>
+                        {k > 0 ? `+${k}` : k} semitones
+                      </option>
+                    ))}
+                  </select>
+                  <select value={manual.octaves} onChange={(e) => setFitMode({ ...manual, octaves: Number(e.target.value) })} title="Whole octaves">
+                    {[-2, -1, 0, 1, 2].map((o) => (
+                      <option key={o} value={o}>
+                        {o > 0 ? `+${o}` : o} octave{Math.abs(o) === 1 ? "" : "s"}
+                      </option>
+                    ))}
+                  </select>
+                  {fitText && <span className="muted">{fitText}</span>}
+                </span>
+              )}
+              <label>
+                <input type="radio" checked={fitMode.kind === "keep"} onChange={() => setFitMode({ kind: "keep" })} />
+                None: keep the original notes{pureReport.unplayable.length ? ` (${pureReport.unplayable.length} shown in red)` : ""}
               </label>
             </div>
 
@@ -313,40 +319,37 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
                 <button className="linkish" onClick={copyText} disabled={!text.trim()} title="Copy the notation to share it as a plain tab">
                   {copied ? "Copied" : "Copy tab as text"}
                 </button>
+                {imported && textEdited && (
+                  <>
+                    {" · "}
+                    <button
+                      className="linkish"
+                      onClick={() => {
+                        setGenerated(null);
+                        setText("");
+                      }}
+                      title="Discard text edits and go back to the import"
+                    >
+                      Back to the import
+                    </button>
+                  </>
+                )}
               </span>
               <span className={retimed ? "warn" : "muted"}>
-                {song.timing === "measured"
-                  ? "Timing from the source is kept."
-                  : retimed
-                    ? "Note count changed: the song will be re-timed to one beat per note."
-                    : "Uniform timing: one beat per note. Record the rhythm with the Record button later."}
+                {textEdited && (existing?.fit || imported)
+                  ? "Edited text becomes the song; the recorded fit is redone from it."
+                  : song.timing === "measured"
+                    ? "Timing from the source is kept."
+                    : retimed
+                      ? "Note count changed: the song will be re-timed to one beat per note."
+                      : "Uniform timing: one beat per note. Record the rhythm with the Record button later."}
               </span>
             </div>
 
             {report.unplayable.length > 0 && (
-              <div className="panel__capability">
-                <p>
-                  <strong>{report.unplayable.length}</strong> of {noteCount} notes are not on this kalimba
-                  {remaining !== report.unplayable.length ? ` (${remaining} after the fix below)` : ""}.
-                </p>
-                <div className="panel__choices">
-                  <label>
-                    <input type="radio" checked={fix === "keep"} onChange={() => setFix("keep")} />
-                    Keep them, shown in red
-                  </label>
-                  {suggestion && suggestion.semitones !== 0 && (
-                    <label>
-                      <input type="radio" checked={fix === "transpose"} onChange={() => setFix("transpose")} />
-                      Transpose {suggestion.semitones > 0 ? "+" : ""}
-                      {suggestion.semitones} semitones ({suggestion.unplayable} left)
-                    </label>
-                  )}
-                  <label>
-                    <input type="radio" checked={fix === "fold"} onChange={() => setFix("fold")} />
-                    Move stray notes by an octave
-                  </label>
-                </div>
-              </div>
+              <p className="panel__capability">
+                <strong>{report.unplayable.length}</strong> of {noteCount} notes are not on this kalimba and will show in red.
+              </p>
             )}
           </>
         )}

@@ -15,9 +15,14 @@ export interface BoardTheme {
 export const DEFAULT_THEME: BoardTheme = {
   wood: "#5a3426",
   woodEdge: "#3d2118",
-  bridge: "#8c8c94",
+  bridge: "#a0a2ac",
   labelOnTine: "#1c1f26",
 };
+
+/** Bridge bar thickness in pixels; it straddles the hit line. */
+export const BRIDGE_THICKNESS = 10;
+/** Height of the glow that fades upward from the bridge into the lane. */
+export const BRIDGE_GLOW = 48;
 
 export interface BoardHighlight {
   /** Index into layout.tines. */
@@ -46,6 +51,12 @@ export function drawBoard(
 
   drawBody(ctx, geo, theme);
 
+  // Nothing of the instrument shows above the bridge.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, geo.hitY, geo.width, geo.height - geo.hitY);
+  ctx.clip();
+
   const glow = new Map<number, number>();
   for (const h of highlights) glow.set(h.tine, Math.max(glow.get(h.tine) ?? 0, h.strength));
 
@@ -62,26 +73,44 @@ export function drawBoard(
       drawLabel(ctx, g, tine.label, tine.octaveDots, geo.laneWidth, theme, style.color);
     }
   }
-  // One bridge bar over every tier: the line notes land on.
-  drawBridge(ctx, { bridgeY: geo.hitY, left: 0, right: geo.width }, theme);
+  ctx.restore();
+  // One bridge bar over every tier: the line notes land on, with a glow
+  // rising into the lane above it.
+  drawBridge(ctx, geo.hitY, geo.width, theme);
   ctx.restore();
   return geo;
 }
 
+/** The soundboard, from the bridge down, rounded only at the bottom. */
 function drawBody(ctx: CanvasRenderingContext2D, geo: BoardGeometry, theme: BoardTheme) {
   const r = Math.min(24, geo.width * 0.04);
+  const top = geo.hitY;
+  const h = geo.height - top - 1;
   ctx.fillStyle = theme.wood;
   ctx.strokeStyle = theme.woodEdge;
   ctx.lineWidth = 2;
-  roundedRect(ctx, 1, 1, geo.width - 2, geo.height - 2, r);
+  ctx.beginPath();
+  ctx.moveTo(1, top);
+  ctx.lineTo(geo.width - 1, top);
+  ctx.lineTo(geo.width - 1, top + h - r);
+  ctx.quadraticCurveTo(geo.width - 1, top + h, geo.width - 1 - r, top + h);
+  ctx.lineTo(1 + r, top + h);
+  ctx.quadraticCurveTo(1, top + h, 1, top + h - r);
+  ctx.closePath();
   ctx.fill();
   ctx.stroke();
 }
 
-function drawBridge(ctx: CanvasRenderingContext2D, layer: { bridgeY: number; left: number; right: number }, theme: BoardTheme) {
-  if (layer.right <= layer.left) return;
+function drawBridge(ctx: CanvasRenderingContext2D, y: number, width: number, theme: BoardTheme) {
+  const grad = ctx.createLinearGradient(0, y - BRIDGE_GLOW, 0, y);
+  grad.addColorStop(0, "rgba(160,162,172,0)");
+  grad.addColorStop(1, "rgba(160,162,172,0.45)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, y - BRIDGE_GLOW, width, BRIDGE_GLOW);
   ctx.fillStyle = theme.bridge;
-  ctx.fillRect(layer.left, layer.bridgeY - 3, layer.right - layer.left, 6);
+  ctx.fillRect(0, y - BRIDGE_THICKNESS / 2, width, BRIDGE_THICKNESS);
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.fillRect(0, y - BRIDGE_THICKNESS / 2, width, 2);
 }
 
 function drawTine(ctx: CanvasRenderingContext2D, g: TineGeometry, color: string, glow: number) {
