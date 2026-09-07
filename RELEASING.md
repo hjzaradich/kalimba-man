@@ -8,26 +8,26 @@ node scripts/release.mjs 0.2.0 "Fixed the loop button"
 
 It bumps the version, commits, tags `v0.2.0`, and pushes. GitHub Actions
 then builds signed installers for Windows, macOS and Linux and publishes
-them, with the updater's `latest.json`, to the public releases repo:
+them, with the updater's `latest.json`, as a release on this repo:
 
-https://github.com/hjzaradich/kalimba-man-releases/releases
+https://github.com/hjzaradich/kalimba-man/releases
 
 Installed copies check that file on launch and offer the update.
 
 ## One-time setup
 
-1. **Repos.** The code repo (this one) can stay private. The releases repo
-   must be public, because every installed copy fetches `latest.json`
-   anonymously and GitHub does not serve release assets from private repos
-   without a token.
+1. **The repo is public**, on purpose: every installed copy fetches
+   `latest.json` anonymously, and GitHub does not serve release assets from
+   private repos without a token. Making it private again would break
+   updates for everyone unless releases move to a separate public repo with
+   a token in CI.
 2. **Signing key.** `~/.tauri/kalimba-man.key` was generated with
    `npx tauri signer generate`. Its public half is in `tauri.conf.json`.
    Back the private key up somewhere safe: lose it and no installed copy
    will ever accept another update. Never commit it.
-3. **Secrets** on the code repo (Settings → Secrets and variables → Actions):
-   - `TAURI_SIGNING_PRIVATE_KEY`: the contents of `~/.tauri/kalimba-man.key`.
-   - `RELEASES_TOKEN`: a fine-grained personal access token with
-     *Contents: read and write* on the releases repo only.
+3. **Secret** on the repo (Settings → Secrets and variables → Actions):
+   `TAURI_SIGNING_PRIVATE_KEY`, the contents of `~/.tauri/kalimba-man.key`.
+   The release job publishes with the token GitHub Actions provides.
 
 ## What friends see
 

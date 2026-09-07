@@ -74,7 +74,7 @@ Goal: any kalimba, any labeling.
 Done when: a friend with a 21-key in a different tuning can define it and
 play the same songs.
 
-## Phase 5 — Release — built; repos exist, first tag pending the two secrets
+## Phase 5 — Release — done
 
 - Installers for all three platforms from CI on a tag; README with the
   SmartScreen and Gatekeeper first-run notes.

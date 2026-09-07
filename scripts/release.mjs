@@ -7,15 +7,15 @@
  * This bumps the version in the three places Tauri reads it, commits, tags
  * `v0.2.0`, and pushes the branch and the tag. GitHub Actions does the rest
  * (.github/workflows/ci.yml, job `release`): signed installers for Windows,
- * macOS and Linux, published with the updater's latest.json to the public
- * releases repo. Installed copies are offered the update on their next
- * launch.
+ * macOS and Linux, published with the updater's latest.json as a GitHub
+ * release on this repo. Installed copies are offered the update on their
+ * next launch.
  *
  * Three things must line up or updates fail silently for users:
  *   1. The version must increase; equal or lower and nobody is offered it.
  *   2. Artifacts must be signed with the key whose public half is in
  *      tauri.conf.json (the TAURI_SIGNING_PRIVATE_KEY secret in CI).
- *   3. latest.json must be reachable without auth: the releases repo is public.
+ *   3. latest.json must be reachable without auth: the repo is public.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -100,5 +100,5 @@ console.log(`
   ✓ Tagged and pushed ${tag}
 
   Watch the build:   ${origin}/actions
-  The release lands: https://github.com/hjzaradich/kalimba-man-releases/releases/tag/${tag}
+  The release lands: ${origin}/releases/tag/${tag}
 `);

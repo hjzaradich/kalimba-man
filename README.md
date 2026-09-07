@@ -29,7 +29,7 @@ Rust ones.
 ## Install
 
 Grab the installer for your system from the
-[releases page](https://github.com/hjzaradich/kalimba-man-releases/releases).
+[releases page](https://github.com/hjzaradich/kalimba-man/releases).
 Nothing is code-signed (that costs money), so the first run shows a warning:
 
 - **Windows**: SmartScreen says the publisher is unknown. Click *More info*,
