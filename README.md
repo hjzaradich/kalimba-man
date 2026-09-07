@@ -3,8 +3,9 @@
 Learn kalimba songs by playing along: import a tab from kalimbatabs.net and
 watch numbered notes fall onto a drawing of your kalimba's tines.
 
-Status: phase 2 of `ROADMAP.md`. Import a tab from a kalimbatabs.net URL
-(with exact timing when the post has MIDI), or paste one; keep songs in a
+Status: phase 6 of `ROADMAP.md`. Import a tab from a kalimbatabs.net URL
+(with exact timing when the post has MIDI), a melody with its rhythm from a
+hooktheory.com TheoryTab page, or paste one; keep songs in a
 library as shareable files; edit the notation; play along on a 17-key,
 21-key or Chill Angels 46-key board with synthesized sound; loop a section,
 add a metronome, hold at each note in wait mode, or tap the rhythm into a

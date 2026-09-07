@@ -3,6 +3,7 @@
 
 pub mod import;
 pub mod smf;
+pub mod theorytab;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -274,6 +275,13 @@ async fn import_url(url: String) -> Result<import::ImportResult, String> {
 }
 
 #[tauri::command]
+async fn import_theorytab(url: String) -> Result<theorytab::TheoryTabImport, String> {
+    tauri::async_runtime::spawn_blocking(move || theorytab::import_theorytab(&url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn get_settings(app: tauri::AppHandle) -> Result<Settings, String> {
     Ok(read_settings(&data_root(&app)?))
 }
@@ -312,6 +320,7 @@ pub fn run() {
             reveal_song,
             read_song_file,
             import_url,
+            import_theorytab,
             list_layouts,
             load_layout,
             save_layout,

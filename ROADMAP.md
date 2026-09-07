@@ -74,7 +74,7 @@ Goal: any kalimba, any labeling.
 Done when: a friend with a 21-key in a different tuning can define it and
 play the same songs.
 
-## Phase 5 — Release — built, awaiting repos and a first tag
+## Phase 5 — Release — built; repos exist, first tag pending the two secrets
 
 - Installers for all three platforms from CI on a tag; README with the
   SmartScreen and Gatekeeper first-run notes.
@@ -83,8 +83,35 @@ play the same songs.
 
 Done when: a friend installs from a link and plays a song without help.
 
+## Phase 6 — TheoryTab melodies — built
+
+Goal: paste a hooktheory.com TheoryTab URL and get a kalimba tab with real
+rhythm, fitted to your instrument.
+
+- Rust: fetch the song page with a browser UA, extract section ids and
+  names, fetch each section's Hookpad JSON from the public endpoint
+  (DESIGN.md §6.4). Fixtures: one single-section and one multi-section song.
+- Hookpad JSON → notes: key and mode to pitches, beats and tempo map to
+  seconds, sections concatenated with markers, chords kept as an optional
+  track. Handles per-voice note lists and rests. Tested against fixtures.
+- Fitting (§6.5): a scorer that tries every transposition and octave and
+  picks by the three-rule order, with tests on a 17-key and the 46-key.
+- Add-song panel: a third tab "From TheoryTab" with the URL field, the
+  section list with checkboxes (import all by default), a voice picker when
+  the analysis has more than one, the chosen transposition with an override,
+  and the usual save. Generated notation text so the song reads as a tab.
+- "Copy tab as text" on any song, so a fitted melody can be shared as plain
+  number notation.
+
+Done when: "On Melancholy Hill" (one section, D major) and "Let It Be"
+(three sections) import from their TheoryTab URLs, play with the right
+rhythm, and land fully on the 46-key with no transposition while the 17-key
+gets the smallest shift that fits.
+
 ## Later
 
+- Play TheoryTab chords as accompaniment (glissandi on the beat).
+- TheoryTab search from inside the app instead of pasting a URL.
 - Microphone note detection and scoring (guitar-hero grading).
 - Borrow rhythm from an external MIDI by sequence alignment (§7.3).
 - Timeline editor.

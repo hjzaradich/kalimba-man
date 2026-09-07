@@ -108,7 +108,8 @@ interface Song {
   version: 1;
   title: string;
   artist?: string;
-  source?: { url: string; fetchedAt: string; kind: "midi" | "text" };
+  source?: { url: string; fetchedAt: string; kind: "midi" | "text" | "theorytab" };
+  chords?: Chord[];   // optional accompaniment from TheoryTab: { time, duration, pitches }
   bpm: number;
   timeSignature: [number, number];
   timing: "measured" | "recorded" | "uniform"; // see 2.3
@@ -188,7 +189,54 @@ lyrics as sections. Timing is `uniform`.
 The "Add song" screen always accepts raw text. This is the fallback if the
 site changes or Cloudflare tightens, and it is also the editor.
 
-### 6.4 Capability check
+### 6.4 TheoryTab (hooktheory.com)
+
+TheoryTab analyses hold what the text era of kalimbatabs lacks: melody as
+scale degrees with rhythm in beats, plus chords, in a stated key and mode.
+There is no official API for them, but the site's own player reads each
+section from a public, unauthenticated endpoint:
+
+```
+GET https://api.hooktheory.com/v1/songs/public/<sectionId>?fields=ID,xmlData,song,jsonData
+```
+
+The section ids are in the song page's HTML (`shToPendingTheoryTabs("tab-<id>", …)`,
+one per section, in page order) and the section names are the page's tab
+labels. `jsonData` is a Hookpad document (`version`, `keys`, `tempos`,
+`meters`, `notes`, `chords`, `endBeat`, …). Notes carry `sd` (scale degree,
+possibly with `#`/`b`), `octave` (relative), `beat` (1-based), `duration`
+(beats), `isRest`. `notes` is a flat list for one voice or a list per voice;
+voice 0 is the melody.
+
+Pitch: `tonic + scale[mode][sd] + accidental + 12·octave`, where octave 0
+starts on the tonic in MIDI octave 4 (Hookpad's own convention: the site
+reports On Melancholy Hill's range as C#5–A5 and that is what this yields),
+before the transposition policy below moves it. Sections are concatenated in page order,
+each becoming a section marker; the tempo map and meter give seconds.
+Chords are kept on the song as an optional accompaniment track (a later
+feature can play them as glissandi). Timing is `measured`.
+
+This is an undocumented endpoint and may change or go away. Import is one
+song at a time, from a URL the user pastes, with a browser user agent, and
+the parser lives behind fixtures so a format change fails a test rather than
+a user. Paste-text import remains the fallback for everything.
+
+### 6.5 Fitting an imported melody to the kalimba
+
+Melodies come in any key and range. The import picks the transposition
+(semitones, any octave) by these rules in order, and reports what it did:
+
+1. A transposition where every note lands on a tine, preferring the
+   smallest shift from the original key, then the smallest octave move.
+2. Otherwise, the one that leaves the fewest notes needing an octave fold
+   (a fold is an octave jump the player must make), then the smallest shift.
+3. Otherwise, the one that leaves the fewest unplayable notes, then the
+   fewest folds, then the smallest shift.
+
+The user sees the chosen shift and can override it in the Add-song panel,
+where the existing "keep in red / transpose / fold" choices remain.
+
+### 6.6 Capability check
 
 After import, compare the song's pitches with the selected layout. Report
 which notes have no tine, and offer: transpose by N semitones, fold

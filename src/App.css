@@ -675,3 +675,41 @@ button.danger {
   display: flex;
   gap: 8px;
 }
+
+/* TheoryTab options in the Add-song panel */
+
+.notice.tt p {
+  margin: 0 0 6px;
+  color: var(--text);
+}
+
+.tt__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+
+.tt__row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tt__sections {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+button.linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: inherit;
+}
+
+button.linkish:hover:not(:disabled) {
+  text-decoration: underline;
+}

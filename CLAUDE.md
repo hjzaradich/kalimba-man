@@ -78,6 +78,12 @@ hit sounds the notes (`practice.ts`); the scheduler must not also play them.
 `Practice` flags its own transport calls as internal so a manual seek is
 told apart from its own pauses and jumps.
 
+**TheoryTab is an undocumented endpoint.** `theorytab.rs` reads section ids
+from the page and each section's Hookpad JSON from
+`api.hooktheory.com/v1/songs/public/<id>`; nobody promised us that. Keep the
+fixtures and let a format change fail the tests. Conversion lives in the
+frontend so the Rust side stays a fetcher.
+
 **The parser never drops input silently.** Anything `notation.ts` cannot read
 becomes a warning with a line and column. Add a test case with the real
 text whenever a site post trips it.
@@ -95,7 +101,8 @@ text whenever a site post trips it.
 - `src/player/` — `transport.ts` (clock), `synth.ts` (Web Audio voice), `scheduler.ts` (hands notes to the synth ahead of time), `noteLayout.ts` (note → tine), `drawPlayer.ts` (one frame), `PlayerCanvas.tsx` (rAF loop), `practice.ts` (wait mode and recording on top of the transport), `TransportBar.tsx`.
 - `src/presets.ts` — the shipped layouts, imported from `layouts/*.layout.json`.
 - `src/settings.ts`, `src/songs.ts` — persistence via Tauri commands or localStorage.
-- `src/importer.ts` — turns the Rust import result into a Song; `src/model/notationOut.ts` writes notes back as text.
+- `src/importer.ts` — turns Rust import results (kalimbatabs, TheoryTab) into Songs; `src/model/notationOut.ts` writes notes back as text.
+- `src/model/hookpad.ts` — Hookpad JSON (TheoryTab) → notes and chords; `src/model/fit.ts` — the transposition/fold fitter (DESIGN.md §6.5). Both tested on saved TheoryTab sections.
 - `src/AddSongPanel.tsx` — URL import, paste, and the text editor (with `existing`); `src/LibraryPanel.tsx` — the song list.
 - `src-tauri/src/lib.rs` — data folder, settings, song file commands, import command.
-- `src-tauri/src/import.rs` — page fetch and extraction for both eras of posts, MIDI → notes; `smf.rs` — the tolerant MIDI reader. Fixtures in `src-tauri/fixtures/`.
+- `src-tauri/src/import.rs` — page fetch and extraction for both eras of posts, MIDI → notes; `smf.rs` — the tolerant MIDI reader; `theorytab.rs` — TheoryTab page and section fetch. Fixtures in `src-tauri/fixtures/`.

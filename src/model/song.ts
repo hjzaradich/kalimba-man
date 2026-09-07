@@ -28,7 +28,14 @@ export interface Section {
 export interface SongSource {
   url: string;
   fetchedAt: string;
-  kind: "midi" | "text";
+  kind: "midi" | "text" | "theorytab";
+}
+
+/** An accompaniment chord, kept from TheoryTab imports for a later feature. */
+export interface Chord {
+  time: number;
+  duration: number;
+  pitches: number[];
 }
 
 export interface Song {
@@ -41,8 +48,11 @@ export interface Song {
   timing: Timing;
   notes: Note[];
   sections: Section[];
+  chords?: Chord[];
   /** The original notation, kept so the editor can round-trip. */
   text?: string;
+  /** Free text about where the notes came from, e.g. the key and the fit applied. */
+  about?: string;
 }
 
 export const DEFAULT_TEXT_BPM = 100;
@@ -136,7 +146,11 @@ export function withBpm(song: Song, bpm: number): Song {
 
 export function transpose(song: Song, semitones: number): Song {
   if (semitones === 0) return song;
-  return { ...song, notes: song.notes.map((n) => ({ ...n, pitch: n.pitch + semitones })) };
+  return {
+    ...song,
+    notes: song.notes.map((n) => ({ ...n, pitch: n.pitch + semitones })),
+    ...(song.chords ? { chords: song.chords.map((c) => ({ ...c, pitches: c.pitches.map((p) => p + semitones) })) } : {}),
+  };
 }
 
 /** A filesystem-safe name for a song file. */
@@ -168,6 +182,14 @@ export function coerceSong(value: unknown): Song | null {
     });
   }
   const timing: Timing = v.timing === "measured" || v.timing === "recorded" ? v.timing : "uniform";
+  const chords: Chord[] | null = Array.isArray(v.chords)
+    ? (v.chords as unknown[]).flatMap((c) => {
+        const y = c as Record<string, unknown>;
+        return typeof y?.time === "number" && typeof y?.duration === "number" && Array.isArray(y.pitches) && (y.pitches as unknown[]).every((p) => typeof p === "number")
+          ? [{ time: y.time, duration: y.duration, pitches: y.pitches as number[] }]
+          : [];
+      })
+    : null;
   const sections: Section[] = Array.isArray(v.sections)
     ? (v.sections as unknown[]).flatMap((s) => {
         const y = s as Record<string, unknown>;
@@ -186,12 +208,14 @@ export function coerceSong(value: unknown): Song | null {
     timing,
     notes,
     sections,
+    ...(chords ? { chords } : {}),
     text: typeof v.text === "string" ? v.text : undefined,
+    about: typeof v.about === "string" ? v.about : undefined,
   };
 }
 
 function isSource(s: unknown): s is SongSource {
   if (typeof s !== "object" || s === null) return false;
   const v = s as Record<string, unknown>;
-  return typeof v.url === "string" && typeof v.fetchedAt === "string" && (v.kind === "midi" || v.kind === "text");
+  return typeof v.url === "string" && typeof v.fetchedAt === "string" && (v.kind === "midi" || v.kind === "text" || v.kind === "theorytab");
 }
