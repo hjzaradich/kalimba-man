@@ -14,7 +14,7 @@ so they don't have to be re-litigated later. `ROADMAP.md` sequences the work.
 1. Import a tab from kalimbatabs.net by URL, one song at a time.
 2. Show it as falling notes, labeled with the number printed on the tine,
    landing on a rendering of the user's kalimba.
-3. Work for any kalimba: ship presets (17-key, 21-key, Chill Angels 46-key),
+3. Work for any kalimba: ship presets (17-key, 21-key, Hluru 34-key, Chill Angels 46-key),
    and let users define their own layout including how accidentals are labeled.
 4. Let users write and edit tabs in the site's text notation.
 5. Songs are files. A friend can be sent a song and open it.

@@ -5,10 +5,12 @@ import type { Layout } from "./model/layout";
 import standard17 from "../layouts/standard-17.layout.json";
 import standard21 from "../layouts/standard-21.layout.json";
 import chillAngels46 from "../layouts/chill-angels-46.layout.json";
+import hluru34 from "../layouts/hluru-34.layout.json";
 
 export const PRESET_LAYOUTS: Layout[] = [
   standard17 as Layout,
   standard21 as Layout,
+  hluru34 as Layout,
   chillAngels46 as Layout,
 ];
 

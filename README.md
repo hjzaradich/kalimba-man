@@ -8,7 +8,8 @@ Status: phase 2 of `ROADMAP.md`. Import a tab from a kalimbatabs.net URL
 library as shareable files; edit the notation; play along on a 17-key,
 21-key or Chill Angels 46-key board with synthesized sound; loop a section,
 add a metronome, hold at each note in wait mode, or tap the rhythm into a
-song that had none. Custom layouts come next.
+song that had none. Define your own kalimba, tiers and labels included, and
+share it as a file. Installers come next.
 
 ## Develop
 

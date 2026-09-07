@@ -33,6 +33,22 @@ describe("preset layouts", () => {
     expect(pitches.slice(8, 13)).toEqual([59, 55, 53, 57, 60]);
   });
 
+  it("hluru-34 is the 17-key fan with a semitone-above tier over it", () => {
+    const l = presetById("hluru-34")!;
+    expect(l.tines).toHaveLength(34);
+    expect(l.layers.map((s) => s.name)).toEqual(["Main", "Sharps"]);
+    const bottom = l.tines.filter((t) => t.layer === 0).map((t) => t.pitch);
+    expect(bottom).toEqual(presetById("standard-17")!.tines.map((t) => t.pitch));
+    for (const t of l.tines.filter((t) => t.layer === 1)) {
+      const below = l.tines.find((f) => f.layer === 0 && f.x === t.x)!;
+      expect(t.pitch).toBe(below.pitch + 1);
+    }
+    // Every semitone from C4 to F6 is playable; F4, C5, F5, C6 exist twice.
+    const unique = new Set(l.tines.map((t) => t.pitch));
+    for (let p = 60; p <= 89; p++) expect(unique.has(p), `missing MIDI ${p}`).toBe(true);
+    expect(l.tines.length - unique.size).toBe(4);
+  });
+
   it("chill-angels-46 covers C3..F6 chromatically with exactly four duplicates", () => {
     const l = presetById("chill-angels-46")!;
     expect(l.tines).toHaveLength(46);

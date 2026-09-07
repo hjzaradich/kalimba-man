@@ -102,7 +102,22 @@ const chillAngels46 = {
   ],
 };
 
-for (const layout of [standard17, standard21, chillAngels46]) {
+// ---- hluru-34: two tiers, chromatic C4..F6 ----------------------------------
+// Bottom tier: the 17-key fan. Top tier: one tine right over each fan tine, a
+// semitone above it (sharps for C D F G A, the natural above for E and B), as
+// Hluru describes the instrument. Same stacking rule as the 46-key's sharps.
+const hluru34 = {
+  id: "hluru-34",
+  name: "Hluru 34-key (chromatic, C)",
+  tuning: "C",
+  accidentalStyle: "sharp",
+  layers: [MAIN, SHARPS],
+  draft: true,
+  notes: "Built from Hluru's description of the instrument, not yet checked against one.",
+  tines: [...mainPitches.map((p, x) => tine(p, 0, x)), ...sharpsPitches.map((p, x) => tine(p, 1, x))],
+};
+
+for (const layout of [standard17, standard21, chillAngels46, hluru34]) {
   const file = join(outDir, `${layout.id}.layout.json`);
   writeFileSync(file, JSON.stringify(layout, null, 2) + "\n");
   console.log(`${layout.id}: ${layout.tines.length} tines -> ${file}`);

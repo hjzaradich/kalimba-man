@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { AddSongPanel } from "./AddSongPanel";
+import { LayoutPanel } from "./LayoutPanel";
 import { LibraryPanel } from "./LibraryPanel";
+import { freeLayoutSlug, listLayouts, loadLayout, readLayoutFromFile, readLayoutFromPath, saveLayout, type LayoutSummary } from "./layouts";
+import type { Layout } from "./model/layout";
 import { applyRecordedTiming, groupNotes } from "./model/recording";
 import { songDuration, type Song } from "./model/song";
 import { PlayerCanvas } from "./player/PlayerCanvas";
@@ -14,7 +17,7 @@ import { PRESET_LAYOUTS, presetById } from "./presets";
 import { DEFAULT_SETTINGS, getDataDir, isTauri, loadSettings, saveSettings, type Settings } from "./settings";
 import { freeSlug, listSongs, readSongFromFile, readSongFromPath, saveSong, type SongSummary } from "./songs";
 
-type Panel = { kind: "none" } | { kind: "library" } | { kind: "add" } | { kind: "edit"; slug: string; song: Song };
+type Panel = { kind: "none" } | { kind: "library" } | { kind: "add" } | { kind: "edit"; slug: string; song: Song } | { kind: "layouts" };
 
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -22,6 +25,8 @@ export default function App() {
   const [song, setSong] = useState<Song | null>(null);
   const [songSlug, setSongSlug] = useState<string | null>(null);
   const [saved, setSaved] = useState<SongSummary[]>([]);
+  const [userLayouts, setUserLayouts] = useState<LayoutSummary[]>([]);
+  const [userLayout, setUserLayout] = useState<Layout | null>(null);
   const [panel, setPanel] = useState<Panel>({ kind: "none" });
   const [handHints, setHandHints] = useState(false);
   const [metronome, setMetronome] = useState(false);
@@ -50,12 +55,36 @@ export default function App() {
   const refreshSongs = useCallback(() => {
     listSongs().then(setSaved).catch((e) => setError(String(e)));
   }, []);
+  const refreshLayouts = useCallback(() => {
+    listLayouts().then(setUserLayouts).catch((e) => setError(String(e)));
+  }, []);
 
   useEffect(() => {
     loadSettings().then(setSettings);
     getDataDir().then(setDataDir);
     refreshSongs();
-  }, [refreshSongs]);
+    refreshLayouts();
+  }, [refreshSongs, refreshLayouts]);
+
+  // A user layout is a file; load it when it becomes the selected one.
+  const layoutId = settings?.layoutId;
+  useEffect(() => {
+    if (!layoutId || presetById(layoutId)) {
+      setUserLayout(null);
+      return;
+    }
+    let cancelled = false;
+    loadLayout(layoutId)
+      .then((l) => {
+        if (!cancelled) setUserLayout(l);
+      })
+      .catch(() => {
+        if (!cancelled) setUserLayout(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [layoutId, userLayouts]);
 
   /** Audio must start from a user gesture (WKWebView); the first Play is it. */
   const ensureAudio = useCallback(() => {
@@ -167,6 +196,26 @@ export default function App() {
     [refreshSongs],
   );
 
+  /** Store an imported layout under a free slug and switch to it. */
+  const adoptLayout = useCallback(
+    async (l: Layout) => {
+      try {
+        const slug = await freeLayoutSlug(l.name);
+        await saveLayout(l, slug);
+        refreshLayouts();
+        setSettings((s) => {
+          const next = { ...(s ?? DEFAULT_SETTINGS), layoutId: slug };
+          void saveSettings(next);
+          return next;
+        });
+        setNotice(`Imported kalimba "${l.name}".`);
+      } catch (e) {
+        setError(`Could not import layout: ${String(e)}`);
+      }
+    },
+    [refreshLayouts],
+  );
+
   // Drag-and-drop of .kalimba.json files. Tauri delivers paths through its
   // own event; a browser delivers File objects through HTML5 DnD.
   useEffect(() => {
@@ -183,6 +232,12 @@ export default function App() {
               for (const path of p.paths) {
                 if (!path.toLowerCase().endsWith(".json")) continue;
                 try {
+                  if (path.toLowerCase().endsWith(".layout.json")) {
+                    const l = await readLayoutFromPath(path);
+                    if (l) await adoptLayout(l);
+                    else setError(`${path} is not a Kalimba Man layout file.`);
+                    continue;
+                  }
                   const s = await readSongFromPath(path);
                   if (s) await adopt(s);
                   else setError(`${path} is not a Kalimba Man song file.`);
@@ -207,6 +262,12 @@ export default function App() {
       e.preventDefault();
       setDragging(false);
       for (const file of Array.from(e.dataTransfer?.files ?? [])) {
+        if (file.name.toLowerCase().endsWith(".layout.json")) {
+          const l = await readLayoutFromFile(file);
+          if (l) await adoptLayout(l);
+          else setError(`${file.name} is not a Kalimba Man layout file.`);
+          continue;
+        }
         const s = await readSongFromFile(file);
         if (s) await adopt(s);
         else setError(`${file.name} is not a Kalimba Man song file.`);
@@ -220,11 +281,11 @@ export default function App() {
       window.removeEventListener("dragleave", leave);
       window.removeEventListener("drop", drop);
     };
-  }, [adopt]);
+  }, [adopt, adoptLayout]);
 
   if (!settings) return <div className="app app--loading">Loading…</div>;
 
-  const layout = presetById(settings.layoutId) ?? presetById(DEFAULT_SETTINGS.layoutId)!;
+  const layout = presetById(settings.layoutId) ?? (userLayout && userLayout.id === settings.layoutId ? userLayout : null) ?? presetById(DEFAULT_SETTINGS.layoutId)!;
 
   const chooseLayout = (layoutId: string) => {
     const next = { ...settings, layoutId };
@@ -259,13 +320,28 @@ export default function App() {
         <label className="picker">
           <span>Kalimba</span>
           <select value={layout.id} onChange={(e) => chooseLayout(e.target.value)}>
-            {PRESET_LAYOUTS.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-                {l.draft ? " (draft)" : ""}
-              </option>
-            ))}
+            <optgroup label="Built in">
+              {PRESET_LAYOUTS.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                  {l.draft ? " (draft)" : ""}
+                </option>
+              ))}
+            </optgroup>
+            {userLayouts.length > 0 && (
+              <optgroup label="Yours">
+                {userLayouts.map((l) => (
+                  <option key={l.slug} value={l.slug}>
+                    {l.name}
+                    {l.draft ? " (draft)" : ""}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
+          <button onClick={() => setPanel({ kind: "layouts" })} title="Copy, edit, import or make a kalimba">
+            Manage…
+          </button>
         </label>
       </header>
 
@@ -324,6 +400,19 @@ export default function App() {
             refreshSongs();
           }}
           onAdd={() => setPanel({ kind: "add" })}
+          onClose={closePanel}
+        />
+      )}
+      {panel.kind === "layouts" && (
+        <LayoutPanel
+          userLayouts={userLayouts}
+          currentId={layout.id}
+          onChoose={(id) => chooseLayout(id)}
+          onChanged={refreshLayouts}
+          onImportFile={(l) => {
+            void adoptLayout(l);
+            closePanel();
+          }}
           onClose={closePanel}
         />
       )}

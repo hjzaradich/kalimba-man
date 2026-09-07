@@ -52,7 +52,7 @@ Done when: "On Melancholy Hill" imports by URL with real timing and shows
 `measured`; "River Flows in You" imports by URL as `uniform`; a song file
 copied to another machine opens there.
 
-## Phase 3 — Practice tools — built
+## Phase 3 — Practice tools — done
 
 Goal: wire the transport controls that were placeholders.
 
@@ -63,7 +63,7 @@ Goal: wire the transport controls that were placeholders.
 Done when: an untimed song can be recorded in one pass and then plays back
 with the recorded rhythm.
 
-## Phase 4 — Custom layouts
+## Phase 4 — Custom layouts — built
 
 Goal: any kalimba, any labeling.
 

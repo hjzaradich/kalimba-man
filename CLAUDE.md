@@ -25,7 +25,13 @@ generator's conventions and will catch drift.
 
 **`chill-angels-46` is a draft.** It has not been checked against the real
 instrument (`layouts/README.md` lists what is unverified). Keep
-`"draft": true` until the user confirms it.
+`"draft": true` until the user confirms it. The user can copy it in the
+kalimba manager, fix it, and tick "checked against the instrument"; fold
+those fixes back into `scripts/gen-layouts.mjs` when they arrive.
+
+**User layouts are files with slugs that never collide with preset ids**
+(`freeLayoutSlug`). `settings.layoutId` may name either; the App resolves
+presets first, then the loaded user layout, then falls back to the default.
 
 **Tier 0 is the bottom tier and is drawn first.** Tiers stacked on top are
 painted later and shorter (`src/board/geometry.ts`), so every tip stays
@@ -78,6 +84,8 @@ text whenever a site post trips it.
 - `src/model/song.ts` — song model, uniform timing, JSON coercion.
 - `src/model/capability.ts` — can this kalimba play this song; transpose/fold fixes.
 - `src/model/recording.ts` — hit groups and tap-to-record re-timing (pure, tested).
+- `src/model/layoutEdit.ts` — pure editing operations on layouts (fills, tiers, tines); `src/model/pitch.ts` — note names.
+- `src/layouts.ts` — user layout files (Tauri or localStorage) and `coerceLayout`; `src/LayoutPanel.tsx` — the kalimba manager and editor; `src/board/hitTest.ts` — click → tine.
 - `src/board/geometry.ts` — pure tine geometry (tested). `drawBoard.ts` paints it; `labels.ts` draws printed labels.
 - `src/player/` — `transport.ts` (clock), `synth.ts` (Web Audio voice), `scheduler.ts` (hands notes to the synth ahead of time), `noteLayout.ts` (note → tine), `drawPlayer.ts` (one frame), `PlayerCanvas.tsx` (rAF loop), `practice.ts` (wait mode and recording on top of the transport), `TransportBar.tsx`.
 - `src/presets.ts` — the shipped layouts, imported from `layouts/*.layout.json`.

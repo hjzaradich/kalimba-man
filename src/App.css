@@ -518,3 +518,141 @@ button.danger {
   pointer-events: none;
   opacity: 0.8;
 }
+
+/* Layout editor */
+
+.panel--editor {
+  width: min(1100px, 96vw);
+  max-height: 94vh;
+}
+
+.panel__subhead {
+  margin: 4px 0 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.editor__top {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.editor__top label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.editor__check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+  padding-bottom: 6px;
+}
+
+.editor__board {
+  height: 260px;
+  position: relative;
+}
+
+.editor__board canvas {
+  display: block;
+  cursor: pointer;
+}
+
+.editor__columns {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.editor__section h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.editor__tier,
+.editor__row,
+.editor__fill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.editor__tier input:not([type]) {
+  width: 90px;
+}
+
+.editor__tier input[type="number"] {
+  width: 64px;
+}
+
+.editor__tier input[type="color"] {
+  width: 32px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: none;
+}
+
+.editor__tier label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.editor__tier button,
+.editor__row button,
+.editor__fill button {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.editor__fill input {
+  width: 56px;
+}
+
+.editor__tine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+
+.editor__tine label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.editor__tine input[type="number"] {
+  width: 60px;
+}
+
+.editor__nudge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.editor__nudge button {
+  padding: 3px 8px;
+  font-size: 12px;
+}

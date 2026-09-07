@@ -1,0 +1,259 @@
+{
+  "id": "hluru-34",
+  "name": "Hluru 34-key (chromatic, C)",
+  "tuning": "C",
+  "accidentalStyle": "sharp",
+  "layers": [
+    {
+      "name": "Main",
+      "color": "#d9dee8"
+    },
+    {
+      "name": "Sharps",
+      "color": "#f2b25c",
+      "xShift": 0.2
+    }
+  ],
+  "draft": true,
+  "notes": "Built from Hluru's description of the instrument, not yet checked against one.",
+  "tines": [
+    {
+      "pitch": 86,
+      "label": "2",
+      "octaveDots": 2,
+      "layer": 0,
+      "x": 0
+    },
+    {
+      "pitch": 83,
+      "label": "7",
+      "octaveDots": 1,
+      "layer": 0,
+      "x": 1
+    },
+    {
+      "pitch": 79,
+      "label": "5",
+      "octaveDots": 1,
+      "layer": 0,
+      "x": 2
+    },
+    {
+      "pitch": 76,
+      "label": "3",
+      "octaveDots": 1,
+      "layer": 0,
+      "x": 3
+    },
+    {
+      "pitch": 72,
+      "label": "1",
+      "octaveDots": 1,
+      "layer": 0,
+      "x": 4
+    },
+    {
+      "pitch": 69,
+      "label": "6",
+      "octaveDots": 0,
+      "layer": 0,
+      "x": 5
+    },
+    {
+      "pitch": 65,
+      "label": "4",
+      "octaveDots": 0,
+      "layer": 0,
+      "x": 6
+    },
+    {
+      "pitch": 62,
+      "label": "2",
+      "octaveDots": 0,
+      "layer": 0,
+      "x": 7
+    },
+    {
+      "pitch": 60,
+      "label": "1",
+      "octaveDots": 0,
+      "layer": 0,
+      "x": 8
+    },
+    {
+      "pitch": 64,
+      "label": "3",
+      "octaveDots": 0,
+      "layer": 0,
+      "x": 9
+    },
+    {
+      "pitch": 67,
+      "label": "5",
+      "octaveDots": 0,
+      "layer": 0,
+      "x": 10
+    },
+    {
+      "pitch": 71,
+      "label": "7",
+      "octaveDots": 0,
+      "layer": 0,
+      "x": 11
+    },
+    {
+      "pitch": 74,
+      "label": "2",
+      "octaveDots": 1,
+      "layer": 0,
+      "x": 12
+    },
+    {
+      "pitch": 77,
+      "label": "4",
+      "octaveDots": 1,
+      "layer": 0,
+      "x": 13
+    },
+    {
+      "pitch": 81,
+      "label": "6",
+      "octaveDots": 1,
+      "layer": 0,
+      "x": 14
+    },
+    {
+      "pitch": 84,
+      "label": "1",
+      "octaveDots": 2,
+      "layer": 0,
+      "x": 15
+    },
+    {
+      "pitch": 88,
+      "label": "3",
+      "octaveDots": 2,
+      "layer": 0,
+      "x": 16
+    },
+    {
+      "pitch": 87,
+      "label": "2#",
+      "octaveDots": 2,
+      "layer": 1,
+      "x": 0
+    },
+    {
+      "pitch": 84,
+      "label": "1",
+      "octaveDots": 2,
+      "layer": 1,
+      "x": 1
+    },
+    {
+      "pitch": 80,
+      "label": "5#",
+      "octaveDots": 1,
+      "layer": 1,
+      "x": 2
+    },
+    {
+      "pitch": 77,
+      "label": "4",
+      "octaveDots": 1,
+      "layer": 1,
+      "x": 3
+    },
+    {
+      "pitch": 73,
+      "label": "1#",
+      "octaveDots": 1,
+      "layer": 1,
+      "x": 4
+    },
+    {
+      "pitch": 70,
+      "label": "6#",
+      "octaveDots": 0,
+      "layer": 1,
+      "x": 5
+    },
+    {
+      "pitch": 66,
+      "label": "4#",
+      "octaveDots": 0,
+      "layer": 1,
+      "x": 6
+    },
+    {
+      "pitch": 63,
+      "label": "2#",
+      "octaveDots": 0,
+      "layer": 1,
+      "x": 7
+    },
+    {
+      "pitch": 61,
+      "label": "1#",
+      "octaveDots": 0,
+      "layer": 1,
+      "x": 8
+    },
+    {
+      "pitch": 65,
+      "label": "4",
+      "octaveDots": 0,
+      "layer": 1,
+      "x": 9
+    },
+    {
+      "pitch": 68,
+      "label": "5#",
+      "octaveDots": 0,
+      "layer": 1,
+      "x": 10
+    },
+    {
+      "pitch": 72,
+      "label": "1",
+      "octaveDots": 1,
+      "layer": 1,
+      "x": 11
+    },
+    {
+      "pitch": 75,
+      "label": "2#",
+      "octaveDots": 1,
+      "layer": 1,
+      "x": 12
+    },
+    {
+      "pitch": 78,
+      "label": "4#",
+      "octaveDots": 1,
+      "layer": 1,
+      "x": 13
+    },
+    {
+      "pitch": 82,
+      "label": "6#",
+      "octaveDots": 1,
+      "layer": 1,
+      "x": 14
+    },
+    {
+      "pitch": 85,
+      "label": "1#",
+      "octaveDots": 2,
+      "layer": 1,
+      "x": 15
+    },
+    {
+      "pitch": 89,
+      "label": "4",
+      "octaveDots": 2,
+      "layer": 1,
+      "x": 16
+    }
+  ]
+}

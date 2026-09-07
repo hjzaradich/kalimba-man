@@ -144,9 +144,7 @@ fn save_song(app: tauri::AppHandle, slug: String, song: serde_json::Value) -> Re
     let path = song_path(&root, &slug)?;
     let text = serde_json::to_string_pretty(&song).map_err(|e| e.to_string())?;
     // Write beside, then rename, so a crash mid-write cannot truncate a song.
-    let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))
+    write_atomically(&path, &text)
 }
 
 #[tauri::command]
@@ -165,6 +163,104 @@ fn reveal_song(app: tauri::AppHandle, slug: String) -> Result<(), String> {
 /// Read a song file from anywhere on disk (drag-and-drop, Import button).
 #[tauri::command]
 fn read_song_file(path: String) -> Result<serde_json::Value, String> {
+    let text = fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
+    serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))
+}
+
+// ---- layouts ---------------------------------------------------------------
+//
+// User-made kalimbas, one file each, same rules as songs. Presets ship in
+// the frontend bundle and never touch this folder.
+
+pub const LAYOUT_EXT: &str = ".layout.json";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutSummary {
+    pub slug: String,
+    pub name: String,
+    pub tines: usize,
+    pub draft: bool,
+}
+
+fn layout_path(root: &Path, slug: &str) -> Result<PathBuf, String> {
+    if !valid_slug(slug) {
+        return Err(format!("invalid layout name {slug:?}"));
+    }
+    Ok(root.join("layouts").join(format!("{slug}{LAYOUT_EXT}")))
+}
+
+pub fn list_layout_files(root: &Path) -> Vec<LayoutSummary> {
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir(root.join("layouts")) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some(slug) = name.strip_suffix(LAYOUT_EXT) else {
+            continue;
+        };
+        let Ok(text) = fs::read_to_string(entry.path()) else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+            continue;
+        };
+        let Some(display) = value.get("name").and_then(|t| t.as_str()) else {
+            continue;
+        };
+        out.push(LayoutSummary {
+            slug: slug.to_string(),
+            name: display.to_string(),
+            tines: value.get("tines").and_then(|t| t.as_array()).map_or(0, Vec::len),
+            draft: value.get("draft").and_then(|d| d.as_bool()).unwrap_or(false),
+        });
+    }
+    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out
+}
+
+fn write_atomically(path: &Path, text: &str) -> Result<(), String> {
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+#[tauri::command]
+fn list_layouts(app: tauri::AppHandle) -> Result<Vec<LayoutSummary>, String> {
+    Ok(list_layout_files(&data_root(&app)?))
+}
+
+#[tauri::command]
+fn load_layout(app: tauri::AppHandle, slug: String) -> Result<serde_json::Value, String> {
+    let path = layout_path(&data_root(&app)?, &slug)?;
+    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+#[tauri::command]
+fn save_layout(app: tauri::AppHandle, slug: String, layout: serde_json::Value) -> Result<(), String> {
+    let root = data_root(&app)?;
+    ensure_data_dir(&root).map_err(|e| e.to_string())?;
+    let path = layout_path(&root, &slug)?;
+    let text = serde_json::to_string_pretty(&layout).map_err(|e| e.to_string())?;
+    write_atomically(&path, &text)
+}
+
+#[tauri::command]
+fn delete_layout(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    let path = layout_path(&data_root(&app)?, &slug)?;
+    fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+#[tauri::command]
+fn reveal_layout(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    let path = layout_path(&data_root(&app)?, &slug)?;
+    tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn read_layout_file(path: String) -> Result<serde_json::Value, String> {
     let text = fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
     serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))
 }
@@ -213,7 +309,13 @@ pub fn run() {
             delete_song,
             reveal_song,
             read_song_file,
-            import_url
+            import_url,
+            list_layouts,
+            load_layout,
+            save_layout,
+            delete_layout,
+            reveal_layout,
+            read_layout_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -263,6 +365,21 @@ mod tests {
         for bad in ["", "../x", "Song", "a b", "a/b", "a\\b"] {
             assert!(song_path(&root, bad).is_err(), "{bad:?} should be rejected");
         }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn layout_files_list_like_songs() {
+        let root = temp_root("layouts");
+        ensure_data_dir(&root).unwrap();
+        assert!(list_layout_files(&root).is_empty());
+        let path = layout_path(&root, "my-kalimba").unwrap();
+        write_atomically(&path, r#"{"name":"My Kalimba","draft":true,"layers":[],"tines":[{"pitch":60}]}"#).unwrap();
+        fs::write(root.join("layouts").join("readme.txt"), "x").unwrap();
+        let listed = list_layout_files(&root);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0], LayoutSummary { slug: "my-kalimba".into(), name: "My Kalimba".into(), tines: 1, draft: true });
+        assert!(layout_path(&root, "../x").is_err());
         fs::remove_dir_all(&root).unwrap();
     }
 

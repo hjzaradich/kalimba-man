@@ -146,9 +146,9 @@ export interface LayoutProblem {
 
 /** Structural checks a layout must pass before it is drawn or saved. */
 export function validateLayout(layout: Layout): LayoutProblem[] {
+  // The id is assigned when a layout is stored, so an unsaved one has none.
   const problems: LayoutProblem[] = [];
-  if (!layout.id) problems.push({ message: "Layout has no id." });
-  if (!layout.name) problems.push({ message: "Layout has no name." });
+  if (!layout.name.trim()) problems.push({ message: "Layout has no name." });
   if (layout.layers.length === 0) problems.push({ message: "Layout has no layers." });
   if (layout.tines.length === 0) problems.push({ message: "Layout has no tines." });
   const occupied = new Map<string, number>();

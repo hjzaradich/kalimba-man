@@ -18,6 +18,14 @@ D5 F5 A5 C6 E6.
 The 17-key with F3, G3, A3 and B3 added in the centre. The outer 17 tines are
 in exactly the 17-key positions, so 17-key tabs read the same.
 
+## hluru-34 — DRAFT, built from the maker's description
+
+Two tiers. Bottom: the standard 17-key fan. Top: one tine over each fan
+tine, a semitone above it: the sharp for C, D, F, G and A, and for E and B,
+which have no sharp, the natural above (F or C), so F4, C5, F5 and C6 exist
+twice. This is what Hluru's own description of the instrument says; nobody
+has checked it against one yet, hence the draft flag.
+
 ## chill-angels-46 — DRAFT, verify against the instrument
 
 Transcribed from the product diagram. The reading below is internally
@@ -54,5 +62,7 @@ from memory on 2026-09-06. Still to confirm with the instrument in hand:
 2. That the bass row's sharps are ordered `1# 2# 4# 5# 6#` left to right as
    the diagram shows.
 
-When you have the kalimba, fix anything wrong in the layout editor (phase 4)
-or in `scripts/gen-layouts.mjs`, then remove `"draft": true`.
+When you have the kalimba, open Kalimba → Manage…, copy this preset, fix
+anything wrong on the board, tick "checked against the instrument", and
+save. Send the resulting `.layout.json` (Reveal shows it) so the preset in
+`scripts/gen-layouts.mjs` can be corrected and `"draft": true` removed.
