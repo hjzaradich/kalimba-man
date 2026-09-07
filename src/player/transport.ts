@@ -16,6 +16,13 @@ export interface LoopRegion {
 /** Shortest loop worth having, in seconds. */
 export const MIN_LOOP = 0.25;
 
+/**
+ * Seconds of silence before the song when playing from the start, so the
+ * first note is not scheduled the instant the audio engine wakes and the
+ * player has time to get ready. Song time is negative during it.
+ */
+export const LEAD_IN = 3;
+
 export class Transport {
   private ctx: AudioContext | null = null;
   private playing = false;
@@ -28,7 +35,10 @@ export class Transport {
   private loopRegion: LoopRegion | null = null;
   private listeners = new Set<TransportListener>();
 
-  constructor(private readonly clock: () => number = () => performance.now() / 1000) {}
+  constructor(
+    private readonly clock: () => number = () => performance.now() / 1000,
+    public leadIn: number = LEAD_IN,
+  ) {}
 
   /** Called after play, pause, seek, rate or loop changes. Not on every tick. */
   subscribe(fn: TransportListener): () => void {
@@ -97,6 +107,8 @@ export class Transport {
   play() {
     if (this.playing) return;
     if (this.anchorSong >= this.durationSec) this.anchorSong = this.loopRegion?.a ?? 0;
+    // From the very start, begin in the lead-in.
+    if (this.anchorSong <= 0) this.anchorSong = -this.leadIn;
     this.anchorReal = this.realNow();
     this.playing = true;
     this.emit();
@@ -115,7 +127,7 @@ export class Transport {
   }
 
   seek(songTime: number) {
-    this.anchorSong = Math.max(0, Math.min(songTime, this.durationSec));
+    this.anchorSong = Math.max(-this.leadIn, Math.min(songTime, this.durationSec));
     this.anchorReal = this.realNow();
     this.emit();
   }

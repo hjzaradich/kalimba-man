@@ -8,7 +8,7 @@ import { Transport } from "./transport";
 function setup(text = "1 2 (3 5) 4", bpm = 60) {
   let real = 50;
   const clock = () => real;
-  const transport = new Transport(clock);
+  const transport = new Transport(clock, 0);
   const scheduler = new Scheduler(transport, null, null);
   const song = songFromText(text, { title: "t", bpm }, parseNotation(text).events);
   const events: PracticeEvent[] = [];

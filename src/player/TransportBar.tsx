@@ -38,7 +38,7 @@ export function TransportBar({ transport, enabled, onPlayToggle, handHints, onHa
     };
   }, [transport]);
 
-  const now = transport.now();
+  const now = Math.max(0, transport.now()); // the lead-in shows as 0:00
   const duration = transport.duration;
   const playing = transport.isPlaying;
   const loop = transport.loop;

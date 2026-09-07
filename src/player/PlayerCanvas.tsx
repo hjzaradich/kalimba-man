@@ -75,7 +75,7 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
         boardHeight: Math.round(height * f.boardFraction),
         handHints: f.handHints,
         pending: practice.pendingNotes,
-        hint: hintFor(practice),
+        hint: hintFor(practice) ?? leadInHint(transport.now(), transport.isPlaying),
         loop: transport.loop,
       });
     };
@@ -91,6 +91,12 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
   }, [transport, scheduler, practice]);
 
   return <canvas ref={canvasRef} className={className} onMouseDown={(e) => e.button === 0 && onHit?.()} />;
+}
+
+/** Countdown during the silent lead-in before the first note. */
+function leadInHint(now: number, playing: boolean): string | null {
+  if (!playing || now >= 0) return null;
+  return `Starting in ${Math.ceil(-now)}…`;
 }
 
 function hintFor(practice: Practice): string | null {

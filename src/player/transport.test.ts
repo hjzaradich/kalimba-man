@@ -7,9 +7,29 @@ function fakeClock() {
 }
 
 describe("Transport", () => {
+  it("starts with a lead-in of silence when playing from the top", () => {
+    const c = fakeClock();
+    const tr = new Transport(c.now); // default lead-in of 3 s
+    tr.setDuration(10);
+    tr.play();
+    expect(tr.now()).toBe(-3);
+    c.advance(3);
+    expect(tr.now()).toBeCloseTo(0);
+    // The lead-in is not repeated after a seek into the song.
+    tr.pause();
+    tr.seek(4);
+    tr.play();
+    expect(tr.now()).toBe(4);
+    // Seeking back to 0 and playing gets the lead-in again.
+    tr.pause();
+    tr.seek(0);
+    tr.play();
+    expect(tr.now()).toBe(-3);
+  });
+
   it("advances song time at the playback rate while playing", () => {
     const c = fakeClock();
-    const tr = new Transport(c.now);
+    const tr = new Transport(c.now, 0);
     tr.setDuration(10);
     expect(tr.now()).toBe(0);
     tr.play();
@@ -25,7 +45,7 @@ describe("Transport", () => {
 
   it("stops at the end and restarts from the top", () => {
     const c = fakeClock();
-    const tr = new Transport(c.now);
+    const tr = new Transport(c.now, 0);
     tr.setDuration(3);
     tr.play();
     c.advance(5);
@@ -38,7 +58,7 @@ describe("Transport", () => {
 
   it("wraps a loop region and keeps playing", () => {
     const c = fakeClock();
-    const tr = new Transport(c.now);
+    const tr = new Transport(c.now, 0);
     tr.setDuration(10);
     expect(tr.setLoop(6, 2)).toBe(true); // order does not matter
     expect(tr.loop).toEqual({ a: 2, b: 6 });
@@ -53,7 +73,7 @@ describe("Transport", () => {
   });
 
   it("rejects loops that are too short and clears them on a new song", () => {
-    const tr = new Transport(fakeClock().now);
+    const tr = new Transport(fakeClock().now, 0);
     tr.setDuration(10);
     expect(tr.setLoop(4, 4.1)).toBe(false);
     expect(tr.loop).toBeNull();
@@ -64,7 +84,7 @@ describe("Transport", () => {
 
   it("maps song time to real time for scheduling", () => {
     const c = fakeClock();
-    const tr = new Transport(c.now);
+    const tr = new Transport(c.now, 0);
     tr.setDuration(10);
     tr.seek(1);
     tr.setRate(2);
@@ -75,7 +95,7 @@ describe("Transport", () => {
 
   it("notifies listeners on state changes only", () => {
     const c = fakeClock();
-    const tr = new Transport(c.now);
+    const tr = new Transport(c.now, 0);
     let n = 0;
     tr.subscribe(() => n++);
     tr.setDuration(5);

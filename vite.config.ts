@@ -27,6 +27,11 @@ export default defineConfig(() => ({
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
+      // 4. this project lives in a OneDrive folder, where native file events
+      //    are unreliable: edits were silently missed and stale modules served.
+      //    Polling is slower but never misses a write.
+      usePolling: true,
+      interval: 300,
     },
   },
 }));
