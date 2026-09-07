@@ -17,9 +17,11 @@ export interface LoopRegion {
 export const MIN_LOOP = 0.25;
 
 /**
- * Seconds of silence before the song when playing from the start, so the
- * first note is not scheduled the instant the audio engine wakes and the
- * player has time to get ready. Song time is negative during it.
+ * Real seconds of silence before the song when playing from the start, so
+ * the first note is not scheduled the instant the audio engine wakes and the
+ * player has time to get ready. Song time is negative during it; the
+ * negative span is scaled by the playback rate so the wait is the same on
+ * the clock at any tempo.
  */
 export const LEAD_IN = 3;
 
@@ -107,8 +109,8 @@ export class Transport {
   play() {
     if (this.playing) return;
     if (this.anchorSong >= this.durationSec) this.anchorSong = this.loopRegion?.a ?? 0;
-    // From the very start, begin in the lead-in.
-    if (this.anchorSong <= 0) this.anchorSong = -this.leadIn;
+    // From the very start, begin in the lead-in: leadIn real seconds.
+    if (this.anchorSong <= 0) this.anchorSong = -this.leadIn * this.rate;
     this.anchorReal = this.realNow();
     this.playing = true;
     this.emit();
@@ -127,7 +129,7 @@ export class Transport {
   }
 
   seek(songTime: number) {
-    this.anchorSong = Math.max(-this.leadIn, Math.min(songTime, this.durationSec));
+    this.anchorSong = Math.max(-this.leadIn * this.rate, Math.min(songTime, this.durationSec));
     this.anchorReal = this.realNow();
     this.emit();
   }
@@ -154,6 +156,12 @@ export class Transport {
     if (!this.loopRegion) return;
     this.loopRegion = null;
     this.emit();
+  }
+
+  /** Real seconds left in the lead-in, or 0 once the song has started. */
+  leadInRemaining(): number {
+    const t = this.now();
+    return t < 0 ? -t / this.rate : 0;
   }
 
   /** Called by the tick loop: wraps the loop and stops at the end of the song. */

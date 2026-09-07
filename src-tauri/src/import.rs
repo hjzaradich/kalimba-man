@@ -38,13 +38,13 @@ pub struct MidiNote {
     pub pitch: u8,
 }
 
-/** One track of a MIDI file, for the track picker. */
+/** One track of a MIDI file, with its notes, so the app can keep them all. */
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MidiTrack {
     pub index: usize,
     pub name: Option<String>,
-    pub notes: usize,
+    pub notes: Vec<MidiNote>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -54,7 +54,8 @@ pub struct MidiImport {
     pub time_signature: (u8, u8),
     /// Notes of the chosen track, or of every track merged.
     pub notes: Vec<MidiNote>,
-    /// Every track that has notes, so the user can pick one.
+    /// Every track that has notes, each with its own notes, so the song can
+    /// keep them all and switch between them later.
     pub tracks: Vec<MidiTrack>,
     /// The track `notes` came from; None when merged.
     pub track: Option<usize>,
@@ -223,26 +224,31 @@ pub fn looks_like_notes(line: &str) -> bool {
 pub fn midi_to_notes(bytes: &[u8], track: Option<usize>) -> Result<MidiImport, String> {
     let file = smf::parse(bytes)?;
 
-    let tracks: Vec<MidiTrack> = file
-        .tracks
-        .iter()
-        .enumerate()
-        .map(|(index, t)| MidiTrack {
-            index,
-            name: t.iter().find_map(|e| match &e.kind {
-                EventKind::TrackName(n) if !n.is_empty() => Some(n.clone()),
-                _ => None,
-            }),
-            notes: t.iter().filter(|e| matches!(e.kind, EventKind::NoteOn { .. })).count(),
-        })
-        .filter(|t| t.notes > 0)
+    let with_notes: Vec<usize> = (0..file.tracks.len())
+        .filter(|&i| file.tracks[i].iter().any(|e| matches!(e.kind, EventKind::NoteOn { .. })))
         .collect();
     if let Some(t) = track {
-        if !tracks.iter().any(|x| x.index == t) {
+        if !with_notes.contains(&t) {
             return Err(format!("track {t} has no notes"));
         }
     }
+    let (bpm, time_signature, notes) = convert(&file, track)?;
+    let tracks = with_notes
+        .iter()
+        .map(|&index| MidiTrack {
+            index,
+            name: file.tracks[index].iter().find_map(|e| match &e.kind {
+                EventKind::TrackName(n) if !n.is_empty() => Some(n.clone()),
+                _ => None,
+            }),
+            notes: convert(&file, Some(index)).map(|(_, _, n)| n).unwrap_or_default(),
+        })
+        .collect();
+    Ok(MidiImport { bpm, time_signature, notes, tracks, track })
+}
 
+/// Tempo, meter and the notes of one track (or all merged), in seconds.
+fn convert(file: &smf::Smf, track: Option<usize>) -> Result<(f64, (u8, u8), Vec<MidiNote>), String> {
     // Merge tracks into one absolute-tick stream; at equal ticks, tempo and
     // time-signature changes come before notes.
     let mut events: Vec<&smf::Event> = file
@@ -309,13 +315,7 @@ pub fn midi_to_notes(bytes: &[u8], track: Option<usize>) -> Result<MidiImport, S
     if notes.is_empty() {
         return Err("the MIDI file has no notes".into());
     }
-    Ok(MidiImport {
-        bpm: first_bpm.unwrap_or(120.0),
-        time_signature,
-        notes,
-        tracks,
-        track,
-    })
+    Ok((first_bpm.unwrap_or(120.0), time_signature, notes))
 }
 
 /// The whole import: fetch the page, try the MIDI, fall back to text.
@@ -391,7 +391,8 @@ mod tests {
     fn midi_file_becomes_timed_notes() {
         let m = midi_to_notes(MIDI, None).unwrap();
         assert_eq!(m.tracks.len(), 1);
-        assert_eq!(m.tracks[0].notes, 150);
+        assert_eq!(m.tracks[0].notes.len(), 150);
+        assert_eq!(m.tracks[0].notes, m.notes);
         assert!(midi_to_notes(MIDI, Some(7)).is_err());
         assert_eq!(midi_to_notes(MIDI, Some(0)).unwrap().notes.len(), 150);
         assert!((m.bpm - 120.0).abs() < 0.01, "bpm {}", m.bpm);

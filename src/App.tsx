@@ -5,7 +5,7 @@ import { LayoutPanel } from "./LayoutPanel";
 import { LibraryPanel } from "./LibraryPanel";
 import { freeLayoutSlug, listLayouts, loadLayout, readLayoutFromFile, readLayoutFromPath, saveLayout, type LayoutSummary } from "./layouts";
 import type { Layout } from "./model/layout";
-import { describeFit, fittedElsewhere, refitSong, restoreOriginal } from "./model/fit";
+import { describeFit, fittedElsewhere, refitSong, restoreOriginal, selectTrack } from "./model/fit";
 import { applyRecordedTiming, groupNotes } from "./model/recording";
 import { songDuration, type Song } from "./model/song";
 import { PlayerCanvas } from "./player/PlayerCanvas";
@@ -19,7 +19,7 @@ import { useUpdater } from "./useUpdater";
 import { PRESET_LAYOUTS, presetById } from "./presets";
 import { DEFAULT_SETTINGS, getDataDir, isTauri, loadSettings, saveSettings, type Settings } from "./settings";
 import { freeSlug, listSongs, readSongFromFile, readSongFromPath, saveSong, type SongSummary } from "./songs";
-import { importMidiPath, likelyMelodyTrack, songFromMidiFile } from "./importer";
+import { importMidiPath, songFromMidiFile } from "./importer";
 
 type Panel = { kind: "none" } | { kind: "library" } | { kind: "add" } | { kind: "edit"; slug: string; song: Song } | { kind: "layouts" };
 
@@ -256,12 +256,11 @@ export default function App() {
                 const lower = path.toLowerCase();
                 if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
                   try {
-                    const first = await importMidiPath(path);
-                    const track = likelyMelodyTrack(first);
-                    const m = track === undefined ? first : await importMidiPath(path, track);
+                    const m = await importMidiPath(path);
                     const name = path.split(/[\\/]/).pop() ?? "song.mid";
-                    await adopt(refitSong(songFromMidiFile(m, name), layoutRef.current));
-                    setNotice(`Imported ${name}${track !== undefined ? ` (track ${track + 1}; pick another in Edit if needed)` : ""}.`);
+                    const s = songFromMidiFile(m, name);
+                    await adopt(refitSong(s, layoutRef.current));
+                    setNotice(`Imported ${name}${s.tracks ? `: ${s.tracks.length} tracks, the fullest selected; switch with the Track menu` : ""}.`);
                   } catch (e) {
                     setError(`Could not import ${path}: ${String(e)}`);
                   }
@@ -361,6 +360,24 @@ export default function App() {
           <span className="topbar__title" title={song?.title}>
             {song ? `${song.title}${song.artist ? ` – ${song.artist}` : ""}` : "No song loaded"}
           </span>
+          {song && song.tracks && song.tracks.length > 1 && (
+            <label className="picker" title="Which track of the file plays; the others show as ghosts">
+              <span>Track</span>
+              <select
+                value={song.activeTrack ?? 0}
+                onChange={(e) => {
+                  const next = selectTrack(song, Number(e.target.value), layout);
+                  void adopt(next, songSlug);
+                }}
+              >
+                {song.tracks.map((t, i) => (
+                  <option key={i} value={i}>
+                    {t.name} ({t.notes.length})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {song && songSlug && (
             <button onClick={() => setPanel({ kind: "edit", slug: songSlug, song })} title="Edit the notation">
               Edit

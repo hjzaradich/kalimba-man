@@ -63,6 +63,12 @@ export interface SongOriginal {
   chords?: Chord[];
 }
 
+/** One track of a multi-track import, as imported (no fit). */
+export interface SongTrack {
+  name: string;
+  notes: Note[];
+}
+
 export interface Song {
   version: 1;
   title: string;
@@ -78,6 +84,9 @@ export interface Song {
   fit?: SongFit;
   /** The notes as imported, before any fit. Present whenever `fit` is. */
   original?: SongOriginal;
+  /** Every track of a multi-track import; `notes` come from `activeTrack`. */
+  tracks?: SongTrack[];
+  activeTrack?: number;
   /** The original notation, kept so the editor can round-trip. */
   text?: string;
   /** Free text about where the notes came from, e.g. the key and the fit applied. */
@@ -211,12 +220,15 @@ export function coerceSong(value: unknown): Song | null {
     : [];
   const fit = coerceFit(v.fit);
   const original = coerceOriginal(v.original);
+  const tracks = coerceTracks(v.tracks);
+  const activeTrack = tracks && typeof v.activeTrack === "number" && v.activeTrack >= 0 && v.activeTrack < tracks.length ? v.activeTrack : undefined;
   return {
     version: 1,
     title: v.title,
     artist: typeof v.artist === "string" ? v.artist : undefined,
     source: isSource(v.source) ? v.source : undefined,
     ...(fit && original ? { fit, original } : {}),
+    ...(tracks && tracks.length > 1 ? { tracks, activeTrack: activeTrack ?? 0 } : {}),
     bpm: typeof v.bpm === "number" && v.bpm > 0 ? v.bpm : DEFAULT_TEXT_BPM,
     timeSignature: Array.isArray(v.timeSignature) && v.timeSignature.length === 2 ? (v.timeSignature as [number, number]) : [4, 4],
     timing,
@@ -263,6 +275,19 @@ function coerceFit(value: unknown): SongFit | null {
     unplayable: typeof v.unplayable === "number" ? v.unplayable : 0,
     auto: v.auto !== false,
   };
+}
+
+function coerceTracks(value: unknown): SongTrack[] | null {
+  if (!Array.isArray(value)) return null;
+  const out: SongTrack[] = [];
+  for (const t of value as unknown[]) {
+    if (typeof t !== "object" || t === null) return null;
+    const v = t as Record<string, unknown>;
+    const notes = coerceNotes(v.notes);
+    if (!notes) return null;
+    out.push({ name: typeof v.name === "string" ? v.name : `Track ${out.length + 1}`, notes });
+  }
+  return out;
 }
 
 function coerceOriginal(value: unknown): SongOriginal | null {

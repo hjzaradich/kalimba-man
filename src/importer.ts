@@ -12,7 +12,7 @@ import { isTauri } from "./settings";
 export interface MidiTrack {
   index: number;
   name?: string | null;
-  notes: number;
+  notes: { time: number; duration: number; pitch: number }[];
 }
 
 export interface MidiImport {
@@ -177,20 +177,29 @@ export async function importMidiPath(path: string, track?: number): Promise<Midi
   return invoke<MidiImport>("import_midi_path", { path, track: track ?? null });
 }
 
-/** The track a kalimba most likely wants: the one with the most notes. */
+/** A first guess at the melody: the fullest track. The user can switch later. */
 export function likelyMelodyTrack(m: MidiImport): number | undefined {
   const tracks = m.tracks ?? [];
   if (tracks.length <= 1) return undefined;
-  return [...tracks].sort((a, b) => b.notes - a.notes)[0].index;
+  return [...tracks].sort((a, b) => b.notes.length - a.notes.length)[0].index;
 }
 
-/** A measured song from a MIDI file, titled from the file name. */
-export function songFromMidiFile(m: MidiImport, fileName: string, overrides: { title?: string; artist?: string } = {}): Song {
+/**
+ * A measured song from a MIDI file, titled from the file name. Files with
+ * several tracks keep them all; `activeTrack` (a MIDI track index) picks the
+ * one that plays, defaulting to the likely melody.
+ */
+export function songFromMidiFile(m: MidiImport, fileName: string, overrides: { title?: string; artist?: string; activeTrack?: number } = {}): Song {
   const base = fileName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
   const title = (overrides.title ?? base).trim() || "Untitled";
   const artist = (overrides.artist ?? "").trim() || undefined;
-  const notes = m.notes.map((n) => ({ time: n.time, duration: n.duration, pitch: n.pitch }));
   const bpm = Math.round(m.bpm * 100) / 100;
+  const clean = (ns: MidiImport["notes"]) => ns.map((n) => ({ time: n.time, duration: n.duration, pitch: n.pitch }));
+  const tracks = (m.tracks ?? []).filter((t) => t.notes.length > 0);
+  const multi = tracks.length > 1;
+  const wanted = overrides.activeTrack ?? likelyMelodyTrack(m);
+  const active = multi ? Math.max(0, tracks.findIndex((t) => t.index === wanted)) : 0;
+  const notes = multi ? clean(tracks[active].notes) : clean(m.notes);
   const song: Song = {
     version: 1,
     title,
@@ -201,6 +210,7 @@ export function songFromMidiFile(m: MidiImport, fileName: string, overrides: { t
     timing: "measured",
     notes,
     sections: [],
+    ...(multi ? { tracks: tracks.map((t) => ({ name: t.name || `Track ${t.index + 1}`, notes: clean(t.notes) })), activeTrack: active } : {}),
   };
   song.text = notationFromNotes(song);
   return song;

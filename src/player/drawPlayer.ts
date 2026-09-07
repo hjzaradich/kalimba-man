@@ -5,7 +5,7 @@ import { drawBoard, roundedRect, type BoardHighlight } from "../board/drawBoard"
 import type { BoardGeometry } from "../board/geometry";
 import { drawTineLabel, labelFontSize } from "../board/labels";
 import type { Layout } from "../model/layout";
-import type { Song } from "../model/song";
+import type { Note, Song } from "../model/song";
 import type { NotePlacement } from "./noteLayout";
 
 /** Seconds of upcoming song visible above the tips at any tempo. */
@@ -31,6 +31,8 @@ export interface PlayerFrame {
   loop?: { a: number; b: number } | null;
   /** Extra tine glows, e.g. from clicking a tine. */
   extraHighlights?: BoardHighlight[];
+  /** Notes of the other tracks of a multi-track song, drawn faintly for orientation. */
+  ghosts?: { notes: Note[]; placements: NotePlacement[] } | null;
 }
 
 export interface PlayerTheme {
@@ -145,8 +147,30 @@ export function drawPlayerFrame(ctx: CanvasRenderingContext2D, f: PlayerFrame, t
     ctx.fillText(s.label, 10, y - 3);
   }
 
-  // Notes. Draw chords' connectors first so blocks sit on top of them.
   const noteWidth = Math.min(geo.laneWidth * 0.8, Math.max(geo.laneWidth * 0.55, 14));
+
+  // Ghosts first, under everything: faint outlines, no labels.
+  if (f.ghosts) {
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < f.ghosts.notes.length; i++) {
+      const n = f.ghosts.notes[i];
+      const place = f.ghosts.placements[i];
+      if (place.tine === null) continue;
+      const g = geo.tines[place.tine];
+      const bottom = yFor(n.time);
+      const top = bottom - Math.max(n.duration * pxPerSecond, noteWidth * 0.6);
+      if (bottom < -4 || top >= hitY) continue;
+      const w = noteWidth * 0.7;
+      roundedRect(ctx, g.cx - w / 2, top, w, Math.min(bottom, hitY) - top, 4);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Notes. Draw chords' connectors first so blocks sit on top of them.
   const chordBottoms = new Map<number, { x1: number; x2: number; y: number }>();
   const visible: { i: number; x: number; top: number; bottom: number; color: string; playable: boolean; tine: number }[] = [];
   const pending = new Set(f.pending ?? []);

@@ -27,6 +27,27 @@ describe("Transport", () => {
     expect(tr.now()).toBe(-3);
   });
 
+  it("keeps the lead-in at three real seconds whatever the tempo", () => {
+    const c = fakeClock();
+    const tr = new Transport(c.now);
+    tr.setDuration(10);
+    tr.setRate(0.5);
+    tr.play();
+    expect(tr.leadInRemaining()).toBeCloseTo(3);
+    c.advance(1);
+    expect(tr.leadInRemaining()).toBeCloseTo(2);
+    c.advance(2);
+    expect(tr.now()).toBeCloseTo(0);
+    expect(tr.leadInRemaining()).toBe(0);
+    // At double speed it is still three real seconds.
+    tr.pause();
+    tr.seek(0);
+    tr.setRate(2);
+    tr.play();
+    c.advance(3);
+    expect(tr.now()).toBeCloseTo(0);
+  });
+
   it("advances song time at the playback rate while playing", () => {
     const c = fakeClock();
     const tr = new Transport(c.now, 0);

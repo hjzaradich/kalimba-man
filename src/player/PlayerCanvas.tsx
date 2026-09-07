@@ -38,10 +38,18 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
   const geoRef = useRef<{ geo: BoardGeometry; laneHeight: number } | null>(null);
   const flashes = useRef<{ tine: number; at: number }[]>([]);
   const placements = useMemo(() => (song ? placeNotes(song, layout) : []), [song, layout]);
+  // Other tracks of a multi-track song, shifted like the active one, drawn faintly.
+  const ghosts = useMemo(() => {
+    if (!song?.tracks || song.tracks.length < 2) return null;
+    const shift = song.fit ? song.fit.semitones + 12 * song.fit.octaves : 0;
+    const notes = song.tracks.flatMap((t, i) => (i === song.activeTrack ? [] : t.notes.map((n) => ({ ...n, pitch: n.pitch + shift }))));
+    const ghostSong = { ...song, notes };
+    return { notes, placements: placeNotes(ghostSong, layout) };
+  }, [song, layout]);
 
   // Keep the latest props in a ref so the single rAF loop never goes stale.
-  const frameRef = useRef({ layout, song, placements, handHints, boardFraction });
-  frameRef.current = { layout, song, placements, handHints, boardFraction };
+  const frameRef = useRef({ layout, song, placements, ghosts, handHints, boardFraction });
+  frameRef.current = { layout, song, placements, ghosts, handHints, boardFraction };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -87,9 +95,10 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
         boardHeight,
         handHints: f.handHints,
         pending: practice.pendingNotes,
-        hint: hintFor(practice) ?? leadInHint(transport.now(), transport.isPlaying),
+        hint: hintFor(practice) ?? leadInHint(transport.leadInRemaining(), transport.isPlaying),
         loop: transport.loop,
         extraHighlights: flashes.current.map((x) => ({ tine: x.tine, strength: 1 - (nowReal - x.at) / FLASH_SECONDS })),
+        ghosts: f.ghosts,
       });
       geoRef.current = { geo, laneHeight: height - boardHeight };
     };
@@ -125,10 +134,10 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
   return <canvas ref={canvasRef} className={className} onMouseDown={onMouseDown} />;
 }
 
-/** Countdown during the silent lead-in before the first note. */
-function leadInHint(now: number, playing: boolean): string | null {
-  if (!playing || now >= 0) return null;
-  return `Starting in ${Math.ceil(-now)}…`;
+/** Countdown during the silent lead-in before the first note, in real seconds. */
+function leadInHint(remaining: number, playing: boolean): string | null {
+  if (!playing || remaining <= 0) return null;
+  return `Starting in ${Math.ceil(remaining)}…`;
 }
 
 function hintFor(practice: Practice): string | null {

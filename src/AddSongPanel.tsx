@@ -3,7 +3,6 @@ import {
   importFromTheoryTab,
   importFromUrl,
   importMidiBytes,
-  likelyMelodyTrack,
   songFromImport,
   songFromMidiFile,
   songFromTheoryTab,
@@ -12,7 +11,7 @@ import {
   type TheoryTabImport,
 } from "./importer";
 import { checkCapability } from "./model/capability";
-import { describeFit, refitSong, restoreOriginal } from "./model/fit";
+import { describeFit, refitSong, restoreOriginal, selectTrack } from "./model/fit";
 import type { Layout } from "./model/layout";
 import { parseNotation, summarize, type NoteEvent } from "./model/notation";
 import { DEFAULT_TEXT_BPM, songFromText, type Song } from "./model/song";
@@ -144,15 +143,13 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
     setFetchError(null);
     try {
       const data = new Uint8Array(await file.arrayBuffer());
-      const first = await importMidiBytes(data);
-      const track = likelyMelodyTrack(first);
-      const result = track === undefined ? first : await importMidiBytes(data, track);
+      const result = await importMidiBytes(data);
       const song = songFromMidiFile(result, file.name);
       setMidi({ name: file.name, data, result });
       setTitle(song.title);
       setArtist("");
       setBpm(song.bpm);
-      setImported({ pure: song, note: `From ${file.name}: ${result.notes.length} notes, ${result.bpm} BPM${(result.tracks?.length ?? 0) > 1 ? `, track ${trackLabel(result, result.track ?? null)}` : ""}.` });
+      setImported({ pure: song, note: `From ${file.name}: ${result.bpm} BPM${song.tracks ? `, ${song.tracks.length} tracks; the fullest is selected, switch below or later from the top bar` : `, ${song.notes.length} notes`}.` });
       setFitMode({ kind: "auto" });
       setGenerated(null);
       setText("");
@@ -165,18 +162,12 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
     }
   };
 
-  const chooseMidiTrack = async (track: number | null) => {
-    if (!midi) return;
-    try {
-      const result = await importMidiBytes(midi.data, track ?? undefined);
-      const song = songFromMidiFile(result, midi.name, { title, artist });
-      setMidi({ ...midi, result });
-      setImported({ pure: song, note: `From ${midi.name}: ${result.notes.length} notes, ${result.bpm} BPM, track ${trackLabel(result, track)}.` });
-      setGenerated(null);
-      setText("");
-    } catch (e) {
-      setFetchError(String(e));
-    }
+  const chooseMidiTrack = (index: number) => {
+    if (!imported?.pure.tracks) return;
+    const pureSong = selectTrack(restoreOriginal(imported.pure), index, layout);
+    setImported({ pure: restoreOriginal(pureSong), note: imported.note });
+    setGenerated(null);
+    setText("");
   };
 
   const doFetch = async () => {
@@ -226,11 +217,6 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
 
   const noteCount = song.notes.length;
   const urlMode = mode === "url" || mode === "theorytab";
-  function trackLabel(m: MidiImport, index: number | null): string {
-    if (index === null) return "all merged";
-    const t = m.tracks?.find((x) => x.index === index);
-    return t ? `${t.index + 1}${t.name ? ` “${t.name}”` : ""} (${t.notes} notes)` : String(index + 1);
-  }
   const manual = fitMode.kind === "manual" ? fitMode : null;
 
   return (
@@ -297,18 +283,17 @@ export function AddSongPanel({ layout, existing, onSave, onClose }: Props) {
           <>
             {fetchError && <p className="error">{fetchError}</p>}
             {imported && <p className="notice">{imported.note}</p>}
-            {midi && (midi.result.tracks?.length ?? 0) > 1 && (
+            {midi && imported?.pure.tracks && (
               <div className="notice tt">
                 <div className="tt__row">
                   <label>
                     Track
-                    <select value={midi.result.track ?? "all"} onChange={(e) => void chooseMidiTrack(e.target.value === "all" ? null : Number(e.target.value))}>
-                      {midi.result.tracks!.map((t) => (
-                        <option key={t.index} value={t.index}>
-                          {trackLabel(midi.result, t.index)}
+                    <select value={imported.pure.activeTrack ?? 0} onChange={(e) => chooseMidiTrack(Number(e.target.value))}>
+                      {imported.pure.tracks.map((t, i) => (
+                        <option key={i} value={i}>
+                          {t.name} ({t.notes.length} notes)
                         </option>
                       ))}
-                      <option value="all">All tracks merged</option>
                     </select>
                   </label>
                 </div>

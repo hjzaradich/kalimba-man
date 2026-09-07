@@ -161,3 +161,19 @@ export function restoreOriginal(song: Song): Song {
 export function fittedElsewhere(song: Song, layout: Layout): boolean {
   return !!song.fit && song.fit.layoutId !== layout.id;
 }
+
+/**
+ * Make another track of a multi-track song the one that plays: its notes
+ * become the original, and the fit is redone the same way as before
+ * (automatically, or with the recorded manual shift).
+ */
+export function selectTrack(song: Song, index: number, layout: Layout): Song {
+  if (!song.tracks || index < 0 || index >= song.tracks.length || index === song.activeTrack) return song;
+  const track = song.tracks[index];
+  const base: Song = { ...song, activeTrack: index, notes: track.notes, original: { notes: track.notes }, fit: undefined };
+  delete base.fit;
+  const override = song.fit && !song.fit.auto ? { semitones: song.fit.semitones, octaves: song.fit.octaves } : undefined;
+  if (song.fit || override) return refitSong(base, layout, override);
+  const plain = restoreOriginal({ ...base, fit: undefined });
+  return { ...plain, activeTrack: index };
+}
