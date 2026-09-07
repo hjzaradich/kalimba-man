@@ -57,7 +57,19 @@ const compare = (a, b) => {
   for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
   return 0;
 };
-if (compare(version, previous) <= 0) {
+// The very first release may keep the version already in the config, as long
+// as no tag for it exists yet. After that, every release must go up.
+let tagExists = false;
+try {
+  git("rev-parse", "-q", "--verify", `refs/tags/v${version}`);
+  tagExists = true;
+} catch {
+  /* no such tag */
+}
+if (tagExists) {
+  die(`Tag v${version} already exists. Pick a higher version; never re-release under an existing tag.`);
+}
+if (compare(version, previous) < 0 || (compare(version, previous) === 0 && tagExists)) {
   die(`tauri.conf.json is at ${previous}; ${version} must be higher or users on ${previous} are not offered it.`);
 }
 
