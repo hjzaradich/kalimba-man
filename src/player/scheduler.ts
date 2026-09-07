@@ -25,6 +25,11 @@ export class Scheduler {
     private song: Song | null,
   ) {
     this.rebuild();
+    // Any seek, play, pause, rate or loop change: start again from wherever
+    // the clock now is, so the notes in between are never handed to the synth.
+    transport.subscribe(() => {
+      this.lastSongTime = -1;
+    });
   }
 
   setSong(song: Song | null) {
@@ -77,7 +82,9 @@ export class Scheduler {
       while (this.nextIndex < this.order.length) {
         const note = song.notes[this.order[this.nextIndex]];
         if (note.time > horizon) break;
-        synth.pluck(note.pitch, transport.realTimeFor(note.time));
+        // A note already behind the clock (a stall, or a jump the
+        // subscription did not see) is skipped, not blurted out now.
+        if (note.time >= now - 0.05) synth.pluck(note.pitch, transport.realTimeFor(note.time));
         this.nextIndex++;
       }
     }

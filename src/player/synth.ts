@@ -8,9 +8,19 @@ export class Synth {
   private readonly wet: GainNode;
 
   constructor(private readonly ctx: AudioContext) {
+    // A limiter before the output: chords of four or five plucks would
+    // otherwise sum past full scale and distort.
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -14;
+    limiter.knee.value = 6;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.12;
+    limiter.connect(ctx.destination);
+
     this.master = ctx.createGain();
-    this.master.gain.value = 0.6;
-    this.master.connect(ctx.destination);
+    this.master.gain.value = 0.5;
+    this.master.connect(limiter);
 
     this.dry = ctx.createGain();
     this.dry.gain.value = 0.8;
@@ -25,10 +35,12 @@ export class Synth {
   }
 
   /** Schedule one pluck at an AudioContext time. */
-  pluck(pitch: number, at: number, velocity = 1) {
+  pluck(pitch: number, at: number, velocity = 0.8) {
     const ctx = this.ctx;
     const freq = 440 * 2 ** ((pitch - 69) / 12);
-    const start = Math.max(at, ctx.currentTime);
+    // Never in the past: a start time behind the clock makes the attack ramp
+    // collapse into a click at full level.
+    const start = Math.max(at, ctx.currentTime + 0.005);
     const ring = 1.4;
 
     const env = ctx.createGain();
