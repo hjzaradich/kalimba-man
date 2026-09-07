@@ -406,8 +406,10 @@ export default function App() {
         <PlayerCanvas layout={layout} song={song} transport={transport} scheduler={scheduler} practice={practice} onHit={hit} onTine={playTine} handHints={handHints} className="player-canvas" />
         {!song && (
           <div className="stage__empty">
-            <p>Import a tab from kalimbatabs.net, or paste one, to start.</p>
-            <button className="primary" onClick={() => setPanel({ kind: "add" })}>
+            <button className="stage__big" onClick={() => setPanel({ kind: "library" })}>
+              Library
+            </button>
+            <button className="stage__big primary" onClick={() => setPanel({ kind: "add" })}>
               Add song…
             </button>
           </div>

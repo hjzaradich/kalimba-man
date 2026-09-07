@@ -131,18 +131,25 @@ input:not([type]) {
 
 .stage__empty {
   position: absolute;
-  inset: 0;
-  display: grid;
-  place-content: center;
-  gap: 12px;
-  text-align: center;
-  color: var(--muted);
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 54%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
   pointer-events: none;
 }
 
-.stage__empty button {
+.stage__big {
   pointer-events: auto;
-  justify-self: center;
+  font-size: 20px;
+  font-weight: 600;
+  padding: 18px 40px;
+  border-radius: 12px;
+  min-width: 200px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
 /* Transport bar */
