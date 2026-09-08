@@ -6,6 +6,11 @@ import { isTauri } from "./settings";
 
 export type UpdateStage = "idle" | "available" | "downloading" | "installing" | "done" | "failed";
 
+/** First retry after a failed check; doubles each time up to RECHECK_MS. */
+const RETRY_MS = 15_000;
+/** How often to look again while the app stays open and no update was found. */
+const RECHECK_MS = 60 * 60 * 1000;
+
 export interface UpdateInfo {
   version: string;
   date?: string;
@@ -33,21 +38,38 @@ export function useUpdater(): Updater {
   useEffect(() => {
     if (!isTauri()) return;
     let cancelled = false;
-    (async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    const schedule = (ms: number) => {
+      if (!cancelled) timer = setTimeout(run, ms);
+    };
+    // One check at launch is not enough: the network may not be up yet, or
+    // the check may just fail once, and the app only ever launches again
+    // when the user restarts it. Retry with growing gaps, then keep looking
+    // now and then while the app stays open.
+    const run = async () => {
+      if (cancelled) return;
+      attempt++;
       try {
         const { check } = await import("@tauri-apps/plugin-updater");
         const found = await check();
-        if (found && !cancelled) {
+        if (cancelled) return;
+        if (found) {
           setHandle(found);
           setUpdate({ version: found.version, date: found.date, body: found.body });
           setStage("available");
+          return;
         }
+        schedule(RECHECK_MS);
       } catch (err) {
         console.warn("update check failed:", err);
+        schedule(Math.min(RECHECK_MS, RETRY_MS * 2 ** (attempt - 1)));
       }
-    })();
+    };
+    void run();
     return () => {
       cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
     };
   }, []);
 
