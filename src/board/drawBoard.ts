@@ -29,6 +29,8 @@ export interface BoardHighlight {
   tine: number;
   /** 0..1, fades the glow. */
   strength: number;
+  /** Glow colour; white when absent. A heard note glows in its own colour. */
+  color?: string;
 }
 
 /**
@@ -57,8 +59,11 @@ export function drawBoard(
   ctx.rect(0, geo.hitY, geo.width, geo.height - geo.hitY);
   ctx.clip();
 
-  const glow = new Map<number, number>();
-  for (const h of highlights) glow.set(h.tine, Math.max(glow.get(h.tine) ?? 0, h.strength));
+  const glow = new Map<number, BoardHighlight>();
+  for (const h of highlights) {
+    const prev = glow.get(h.tine);
+    if (!prev || h.strength > prev.strength) glow.set(h.tine, h);
+  }
 
   // Bottom tier first. Each tier above is physically on top, so it is painted
   // later and covers the upper part of whatever sits beneath it. Its tips end
@@ -69,7 +74,7 @@ export function drawBoard(
     for (const g of geo.tines) {
       if (g.layer !== layer.layer) continue;
       const tine = layout.tines[g.index];
-      drawTine(ctx, g, style.color, glow.get(g.index) ?? 0);
+      drawTine(ctx, g, style.color, glow.get(g.index));
       drawLabel(ctx, g, tine.label, tine.octaveDots, geo.laneWidth, theme, style.color);
     }
   }
@@ -113,12 +118,14 @@ function drawBridge(ctx: CanvasRenderingContext2D, y: number, width: number, the
   ctx.fillRect(0, y - BRIDGE_THICKNESS / 2, width, 2);
 }
 
-function drawTine(ctx: CanvasRenderingContext2D, g: TineGeometry, color: string, glow: number) {
+function drawTine(ctx: CanvasRenderingContext2D, g: TineGeometry, color: string, highlight?: BoardHighlight) {
   const x = g.cx - g.width / 2;
   const h = g.tip - g.top;
+  const glow = highlight?.strength ?? 0;
+  const glowColor = highlight?.color ?? "#ffffff";
   if (glow > 0) {
     ctx.save();
-    ctx.shadowColor = "#ffffff";
+    ctx.shadowColor = glowColor;
     ctx.shadowBlur = 18 * glow;
     ctx.fillStyle = color;
     roundedRect(ctx, x, g.top - 4, g.width, h + 4, g.width / 2);
@@ -132,9 +139,12 @@ function drawTine(ctx: CanvasRenderingContext2D, g: TineGeometry, color: string,
   ctx.fillStyle = "rgba(0,0,0,0.18)";
   ctx.fillRect(x + g.width * 0.7, g.top, g.width * 0.3, h - g.width / 2);
   if (glow > 0) {
-    ctx.fillStyle = `rgba(255,255,255,${0.55 * glow})`;
+    ctx.save();
+    ctx.globalAlpha = 0.55 * glow;
+    ctx.fillStyle = glowColor;
     roundedRect(ctx, x, g.tip - g.width * 2.2, g.width, g.width * 2.2, g.width / 2);
     ctx.fill();
+    ctx.restore();
   }
 }
 

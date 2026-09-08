@@ -121,3 +121,14 @@ text whenever a site post trips it.
 - `src/AddSongPanel.tsx` — URL import, paste, and the text editor (with `existing`); `src/LibraryPanel.tsx` — the song list.
 - `src-tauri/src/lib.rs` — data folder, settings, song file commands, import command.
 - `src-tauri/src/import.rs` — page fetch and extraction for both eras of posts, MIDI → notes; `smf.rs` — the tolerant MIDI reader; `theorytab.rs` — TheoryTab page and section fetch. Fixtures in `src-tauri/fixtures/`.
+
+**Score mode hears through one file.** `src/mic/listener.ts` is the only
+file that touches the capture API. `pump.worklet.js` stays plain
+JavaScript and must be emitted as a real asset (`vite.config.ts` stops
+Vite inlining it; a data: URL is not a worklet module everywhere). The
+detector (`src/mic/detector.ts`) is pure: arrays in, hits out, tested with
+synthetic plucks in `testSignals.ts` and, once recorded, WAV fixtures
+from the instrument. Hit times are AudioContext seconds, the transport's
+clock; never stamp them from `performance.now()`. Score mode is exclusive
+with wait and record, and switches Mute on; the metronome is not part of
+Mute because the detector rejects its click.

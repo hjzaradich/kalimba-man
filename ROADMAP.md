@@ -108,11 +108,49 @@ Done when: "On Melancholy Hill" (one section, D major) and "Let It Be"
 rhythm, and land fully on the 46-key with no transposition while the 17-key
 gets the smallest shift that fits.
 
+## Phase 7 — Score mode, part 1: hearing the kalimba — in progress
+
+Goal: switch to score mode, pluck the real instrument, and the matching
+tines light up on the board (DESIGN.md §16).
+
+1. Spike: microphone → worklet pump → level meter in the transport bar.
+   Proves the WebView2 permission prompt, worklet loading under Vite and
+   Tauri, and the shared AudioContext. Adds a "Save clip" control (20 s
+   to WAV in the data folder's `recordings`) so fixtures come through the
+   real mic path. — built; the permission prompt inside Tauri and the
+   meter on a live mic are still to be seen on a real machine.
+2. Detector as a pure module (§16.5) with synthetic-signal tests: single
+   notes, chords, an arpeggio over a ringing note, the bass row, quick
+   repeats, a metronome click, silence. — built, ten scenes pass.
+3. Mute button in the transport bar, saved in settings; the score-mode
+   toggle, exclusive with wait and record, which switches mute on and
+   restores it on exit. Hits light tines on the board in their own
+   colour. — built. Still to do: record the real-instrument fixtures and
+   tune thresholds against them.
+4. Microphone picker with the saved device and the missing-device
+   fallback; tuning offset; sensitivity; the tolerant `mic` settings
+   block. — the listener supports a device id and fallback; no UI yet.
+
+Done when: on the 46-key, the fan, the bass row, the sharps tier and a
+chord each light the right tines, nothing lights during silence or from
+the metronome, the song is silent in score mode unless unmuted, and the
+fixtures pass in CI.
+
+## Phase 8 — Tuner mode — later
+
+Reads the ringing note's pitch continuously from the same detector and
+shows the cents on a needle; a pass through the instrument records
+per-tine offsets and spectra for detection (§16.6).
+
+## Phase 9 — Score mode, part 2: grading — later
+
+Hits matched to notes within timing windows, per-note feedback on the
+falling notes, running score and end-of-song summary (§16.9).
+
 ## Later
 
 - Play TheoryTab chords as accompaniment (glissandi on the beat).
 - TheoryTab search from inside the app instead of pasting a URL.
-- Microphone note detection and scoring (guitar-hero grading).
 - Borrow rhythm from an external MIDI by sequence alignment (§7.3).
 - Timeline editor.
 - Code signing and notarization if the warnings turn friends away.

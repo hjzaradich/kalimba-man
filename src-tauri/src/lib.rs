@@ -17,6 +17,8 @@ use tauri::Manager;
 pub struct Settings {
     pub version: u32,
     pub layout_id: String,
+    /// The song's plucks are silent; score mode switches this on (DESIGN.md §16.7).
+    pub muted: bool,
 }
 
 impl Default for Settings {
@@ -24,12 +26,14 @@ impl Default for Settings {
         Settings {
             version: 1,
             layout_id: "standard-17".to_string(),
+            muted: false,
         }
     }
 }
 
 /// The folders the app keeps under the platform's app-data directory.
-pub const SUBFOLDERS: [&str; 2] = ["songs", "layouts"];
+/// `recordings` holds microphone clips saved for tuning the detector.
+pub const SUBFOLDERS: [&str; 3] = ["songs", "layouts", "recordings"];
 
 /// Creates the data folder and its subfolders if they are missing.
 pub fn ensure_data_dir(root: &Path) -> std::io::Result<()> {
@@ -310,6 +314,45 @@ fn get_data_dir(app: tauri::AppHandle) -> Result<String, String> {
     Ok(data_root(&app)?.to_string_lossy().into_owned())
 }
 
+// ---- recordings ------------------------------------------------------------
+//
+// Microphone clips the user saves so the detector can be tuned against the
+// real instrument (DESIGN.md §16.10). The WAV bytes arrive as the raw
+// request body, the name in a header, so a two-megabyte clip is not
+// serialised as a JSON array.
+
+fn recording_path(root: &Path, name: &str) -> Result<PathBuf, String> {
+    if !valid_slug(name) {
+        return Err(format!("invalid recording name {name:?}"));
+    }
+    Ok(root.join("recordings").join(format!("{name}.wav")))
+}
+
+/// Writes the body to `recordings/<name>.wav` and returns the path.
+#[tauri::command]
+fn save_recording(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let name = request
+        .headers()
+        .get("x-name")
+        .and_then(|v| v.to_str().ok())
+        .ok_or("missing recording name")?;
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("recording body must be raw bytes".to_string());
+    };
+    let root = data_root(&app)?;
+    ensure_data_dir(&root).map_err(|e| e.to_string())?;
+    let path = recording_path(&root, name)?;
+    fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Open the recordings folder with the clip selected.
+#[tauri::command]
+fn reveal_recording(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    let path = recording_path(&data_root(&app)?, &name)?;
+    tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -340,7 +383,9 @@ pub fn run() {
             save_layout,
             delete_layout,
             reveal_layout,
-            read_layout_file
+            read_layout_file,
+            save_recording,
+            reveal_recording
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -419,6 +464,7 @@ mod tests {
         let custom = Settings {
             version: 1,
             layout_id: "chill-angels-46".into(),
+            muted: true,
         };
         write_settings(&root, &custom).unwrap();
         assert_eq!(read_settings(&root), custom);

@@ -794,3 +794,39 @@ button.linkish:hover:not(:disabled) {
   background: rgba(124, 192, 255, 0.1);
   border-bottom: 1px solid rgba(124, 192, 255, 0.35);
 }
+
+/* Microphone level (score mode) */
+
+.meter {
+  position: relative;
+  width: 84px;
+  height: 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  overflow: hidden;
+  align-self: center;
+}
+
+.meter__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: linear-gradient(90deg, #6fd39a 0%, #e8d36a 70%, #e0514f 100%);
+  background-size: 84px 100%;
+}
+
+.meter__peak {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.meter.is-clipping {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}

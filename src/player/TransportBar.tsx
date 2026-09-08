@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { LevelMeter } from "../mic/LevelMeter";
+import type { Listener, ListenerState } from "../mic/listener";
 import type { Section } from "../model/song";
 import type { PracticeState } from "./practice";
 import type { Transport } from "./transport";
@@ -17,6 +19,16 @@ interface Props {
   onWaitMode: (on: boolean) => void;
   onRecord: () => void;
   onCancelRecord: () => void;
+  /** The microphone; score mode is on while it is listening (DESIGN.md §16.7). */
+  listener: Listener;
+  mic: ListenerState;
+  onScoreMode: (on: boolean) => void;
+  /** The song's plucks are silent; the metronome is not part of it. */
+  muted: boolean;
+  onMute: (on: boolean) => void;
+  /** Seconds left of a clip being saved, or null when none is. */
+  clip: number | null;
+  onSaveClip: () => void;
 }
 
 function fmt(seconds: number): string {
@@ -25,7 +37,27 @@ function fmt(seconds: number): string {
 }
 
 /** Every control from DESIGN.md §8. */
-export function TransportBar({ transport, enabled, sections = [], onPlayToggle, handHints, onHandHints, metronome, onMetronome, practice, onWaitMode, onRecord, onCancelRecord }: Props) {
+export function TransportBar({
+  transport,
+  enabled,
+  sections = [],
+  onPlayToggle,
+  handHints,
+  onHandHints,
+  metronome,
+  onMetronome,
+  practice,
+  onWaitMode,
+  onRecord,
+  onCancelRecord,
+  listener,
+  mic,
+  onScoreMode,
+  muted,
+  onMute,
+  clip,
+  onSaveClip,
+}: Props) {
   const [, force] = useState(0);
   const [rate, setRate] = useState(transport.playbackRate);
 
@@ -46,6 +78,8 @@ export function TransportBar({ transport, enabled, sections = [], onPlayToggle, 
   const playing = transport.isPlaying;
   const loop = transport.loop;
   const recording = practice.mode === "record";
+  // Score mode is exclusive with wait and record: a performance, not a drill.
+  const scoring = mic.status === "on" || mic.status === "starting";
 
   const setLoopPoint = (which: "a" | "b") => {
     const t = transport.now();
@@ -128,11 +162,14 @@ export function TransportBar({ transport, enabled, sections = [], onPlayToggle, 
         <button className={metronome ? "is-on" : ""} disabled={!enabled} onClick={() => onMetronome(!metronome)} title="Click on every beat, accented on the bar">
           Metronome
         </button>
+        <button className={muted ? "is-on" : ""} onClick={() => onMute(!muted)} title="Silence the song's notes; the metronome still clicks">
+          Mute
+        </button>
         <button
           className={practice.mode === "wait" ? "is-on" : ""}
-          disabled={!enabled || recording}
+          disabled={!enabled || recording || scoring}
           onClick={() => onWaitMode(practice.mode !== "wait")}
-          title="Pause at each note until you press Space or click"
+          title={scoring ? "Not available in score mode" : "Pause at each note until you press Space or click"}
         >
           Wait for me
         </button>
@@ -141,8 +178,22 @@ export function TransportBar({ transport, enabled, sections = [], onPlayToggle, 
             Cancel ({practice.next}/{practice.total})
           </button>
         ) : (
-          <button disabled={!enabled} onClick={onRecord} title="Tap Space or click once per note; the song takes your rhythm">
+          <button disabled={!enabled || scoring} onClick={onRecord} title={scoring ? "Not available in score mode" : "Tap Space or click once per note; the song takes your rhythm"}>
             Record rhythm
+          </button>
+        )}
+        <button
+          className={scoring ? "is-on" : ""}
+          disabled={recording || mic.status === "starting"}
+          onClick={() => onScoreMode(!scoring)}
+          title={mic.error ?? "Listen to your kalimba through the microphone"}
+        >
+          {mic.status === "starting" ? "Starting mic…" : "Score mode"}
+        </button>
+        {scoring && <LevelMeter listener={listener} />}
+        {scoring && (
+          <button disabled={clip !== null || mic.status !== "on"} onClick={onSaveClip} title="Save 20 seconds of what the microphone hears, for tuning the detector">
+            {clip !== null ? `Recording ${clip}s…` : "Save clip"}
           </button>
         )}
         <button

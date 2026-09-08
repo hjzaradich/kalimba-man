@@ -8,9 +8,11 @@ import { invoke } from "@tauri-apps/api/core";
 export interface Settings {
   version: 1;
   layoutId: string;
+  /** The song's plucks are silent; score mode switches this on (DESIGN.md §16.7). */
+  muted: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { version: 1, layoutId: "standard-17" };
+export const DEFAULT_SETTINGS: Settings = { version: 1, layoutId: "standard-17", muted: false };
 
 const STORAGE_KEY = "kalimba-man.settings";
 

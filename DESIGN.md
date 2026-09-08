@@ -384,3 +384,277 @@ Import button.
 - Exact 46-key tine order per physical layer (see `layouts/README.md`).
 - Whether the site's text tabs ever use `b` for flats or a lowered-octave
   mark; the parser accepts them but the corpus should confirm.
+
+---
+
+## 16. Score mode: hearing the kalimba (draft)
+
+Status: design only. Nothing below is built. Numbers are starting points
+to be tuned against recordings of the real instrument, not decisions.
+
+### 16.1 Goal and scope
+
+Score mode: the user plays along on a real kalimba, the microphone hears
+it, and the app grades the performance. It is built in two pieces because
+everything rests on the first one:
+
+1. **Listening** (this section): turn the microphone signal into "tine N
+   was plucked at time T" events. Done when switching to score mode and
+   plucking the real instrument lights the matching tines on the board, the
+   bass row and chords included, with nothing lighting up in silence or
+   from the metronome.
+2. **Grading** (§16.9, sketched only): match those events against the
+   song's notes and show a score.
+
+Score mode is a mode of its own, exclusive with wait and record: those
+are practice aids for learning a passage, score mode is a performance,
+and mixing them would blur what a score means. Listening is still useful
+before grading exists: it is the pitch source a later tuner mode builds
+on (§16.6).
+
+### 16.2 Why this is easier than general pitch tracking
+
+The layout already says which frequencies can occur. A 46-key in C has 42
+distinct pitches from C3 (130.8 Hz) to F6 (1396.9 Hz); a 17-key has 17.
+Detection is not "what pitch is this?" but "which of these known
+frequencies just started sounding?", a template question with the layout
+as the prior. On a 17-key, an accidental heard from the room maps to no
+tine and is ignored for free.
+
+Kalimba acoustics help too. A plucked tine is a clamped-free bar: a strong
+fundamental with a sharp attack and a ring of one to three seconds, and
+overtones that are inharmonic (about 6.3× and 17.5× the fundamental, not
+2× and 3×) and die within tens of milliseconds. So the fundamental is
+always the loudest peak, there is almost no energy at the octave (octave
+errors, the curse of guitar tuners, are rare), and the overtones can be
+told from real notes by how fast they vanish.
+
+The hard parts are the opposite ones: notes ring long and overlap, chords
+are common, and the bass row's semitones are 8 to 14 Hz apart.
+
+### 16.3 Rejected approaches
+
+- **Monophonic pitch trackers** (YIN, autocorrelation, `pitchy`): one
+  pitch at a time; a note ringing under a new one, or any chord, breaks
+  them.
+- **Neural pitch models** (CREPE via TensorFlow.js): a model file and a
+  runtime for a problem the layout already constrains; against the
+  zero-dependency rule.
+- **Capturing audio in Rust** (`cpal`): more reliable across WebViews, but
+  it introduces a second clock. Samples would arrive over IPC with no
+  relation to the AudioContext the transport runs on, and score timing
+  must be on the one clock (§9). Kept as the fallback for capture only if
+  a WebView cannot open the microphone (§16.8).
+- **Polling an `AnalyserNode` from the animation loop**: no build plumbing,
+  but the hop is the frame interval and timestamps are whenever the frame
+  happened to run. Fine for a spike, not for onset times.
+
+### 16.4 Signal path
+
+```
+getUserMedia ──► MediaStreamAudioSourceNode ──► AudioWorkletNode ──► Gain(0) ──► destination
+ (mono; echo cancellation, noise suppression   "pump": fixed-size hops   (keeps the node
+  and auto gain all OFF: they are speech       posted to the main thread   pulled; nothing
+  filters and mangle tones)                    with the AudioContext time  is audible)
+                                               of the first sample
+                                                        │
+                                                        ▼
+                                        Detector (pure TypeScript, no audio API)
+                                                        │
+                                                        ▼
+                                  Listener emits DetectedHit → board, Practice, Scorer
+```
+
+The worklet is deliberately dumb: a ring buffer that posts one hop
+(512 samples, about 11 ms at 48 kHz) at a time, stamped with the context
+time of its first sample. All logic lives in a pure module the tests can
+drive with arrays. Message rate is under 100 per second, negligible.
+
+The microphone joins the AudioContext the synth already uses, so hit
+times are on the transport's clock with no conversion. Enabling score mode
+is a click, which satisfies the user-gesture rule (§13); `ensureAudio`
+runs first.
+
+The mic is never routed to the speakers.
+
+```ts
+interface DetectedHit {
+  time: number;       // AudioContext seconds of the onset, not of the decision
+  pitch: number;      // MIDI, after the tuning offset
+  cents: number;      // how far from the tine's nominal pitch the peak sat
+  tines: number[];    // every tine with that pitch (duplicates on upper tiers)
+  strength: number;   // 0..1, relative to the recent loudest onset
+}
+```
+
+### 16.5 Detector
+
+Per hop, on a Hann-windowed frame of 4096 samples (85 ms at 48 kHz):
+
+1. **Magnitude spectrum**, bins below about 100 Hz discarded (mains hum,
+   desk thumps). A slow per-bin noise floor is tracked and subtracted.
+2. **Spectral flux**: the positive part of the difference between this
+   spectrum and the one from a few hops ago. Notes still ringing from
+   before were already in the reference and cancel out; a decaying note
+   goes negative and is clipped to zero. What remains is what is *new*.
+   This is the whole trick for polyphony: a chord is several peaks in the
+   flux, an arpeggio over a sustained note is one peak at a time.
+3. **Onset**: the summed flux crosses an adaptive threshold (a multiple of
+   its recent median, plus a floor) and is a local maximum. A hit's `time`
+   is the hop where it crossed, so the decision may be late but the
+   timestamp is not.
+4. **Peaks**: local maxima in the flux at the onset, sharpened by parabolic
+   interpolation to well under a bin, converted to cents from the nearest
+   layout pitch. Accept within a tolerance (start at ±40 cents), reject
+   the rest.
+5. **Sustain check**: a candidate must still be present two hops later.
+   The inharmonic overtones fail this (they are gone in 20 to 30 ms); so
+   does the metronome click (40 ms of square wave) and a knock on the
+   table. This is what lets the metronome stay on in score mode.
+6. **Overtone mask**: once a fundamental is accepted, a weaker candidate
+   near 6.3× it in the same onset is dropped. C3's overtone lands 22 cents
+   from G♯5; the sustain check catches it, this is the belt to those
+   braces.
+7. **Refractory**: the same pitch cannot fire twice within 60 ms.
+
+**The bass row.** An 85 ms window has bins 11.7 Hz wide; C3 and C♯3 are
+7.8 Hz apart. Two things make it workable. Interpolation places a single
+isolated peak to about a hertz, and simultaneous semitones in the bass do
+not occur in tabs. If recordings show the row is still unreliable, the
+next step is a second, longer window (8192 samples) that only confirms
+pitches below C4, ending 100 to 170 ms after the onset. Kalimba notes ring
+long enough for a late decision, and the hit keeps the onset's timestamp.
+
+**Upgrade path.** If peak picking is not enough, the same flux can be
+decomposed onto *measured* per-tine spectra captured in a calibration
+pass (§16.6), a small non-negative least squares per onset. The plumbing
+does not change; only step 4 does.
+
+Everything above is a pure function of `(frame, state, layout, settings)`
+and lives in `src/mic/detector.ts`, with `src/mic/tuning.ts` for Hz, MIDI
+and cents. The worklet is `src/mic/pump.worklet.js`, plain JavaScript so
+the bundler has nothing to transpile, loaded by URL. `src/mic/listener.ts`
+owns `getUserMedia`, the graph, permissions, device choice and the level
+meter, and is the only file that touches the audio API.
+
+### 16.6 Tuning and calibration
+
+Real kalimbas are not at A440 and single tines drift. Three layers:
+
+1. **Tolerance** (default ±40 cents) absorbs small errors with no setup.
+2. **Global offset**: the running median of `cents` over accepted hits.
+   An instrument 15 cents flat moves the window after a few notes. Saved
+   per layout in settings so it survives a restart.
+3. **Per-tine offsets** (with the tuner, after this feature): a tuner
+   mode plays through the instrument tine by tine, records each one's true
+   frequency and spectrum, and stores `centsOffset` on the tine. That is
+   where the measured spectra for §16.5's upgrade path come from.
+
+**Tuner mode** is the next thing after listening works and reuses it. A
+tuner needs one more thing than onsets: the pitch of a note *as it
+rings*, so the needle can settle. The detector already interpolates the
+peak at the onset; the tuner keeps re-reading that peak on the plain
+magnitude spectrum for as long as the note sounds and shows the cents.
+Nothing in the signal path changes, which is why `DetectedHit` carries
+`cents` from the start.
+
+**Latency.** The onset timestamp lags the pluck by the microphone's own
+delay plus part of a window, roughly 30 to 60 ms and constant for a given
+setup. Lighting a tine does not care; grading does. A `latencyMs` setting
+is subtracted from hit times, defaulting to a guess from
+`AudioContext.baseLatency` and the track's reported latency, with a later
+calibration routine: play the metronome through the speakers, hear the
+click, measure the round trip.
+
+### 16.7 In the app
+
+- **Mute is a transport-bar button of its own.** It silences the song's
+  plucks (and accompaniment, when that exists) at a gain on the synth's
+  pluck path; the falling notes and the landing glow carry on, so the
+  song is still readable with the sound off. The metronome is not part of
+  mute: it has its own switch, its click cannot fool the detector
+  (§16.5), and it is the one sound a player on speakers wants while
+  scoring. Mute exists independently of score mode; it is simply useful.
+- **Score mode is a transport-bar toggle** next to wait and record, and
+  exclusive with them: turning it on turns them off, and their buttons
+  are disabled while it is on. On: request the mic, **switch mute on**
+  (the instrument is the sound now, and the synth heard through the mic
+  would grade the app against itself), show a small level meter so the
+  user can see it is listening. Headphones are optional: a user wearing
+  them can unmute and hear the song, and score mode leaves their choice
+  alone for the rest of the session. Off: restore mute to what it was
+  before, stop the track so the OS recording indicator goes away. Denied
+  or no device: an error in the bar, mode stays off.
+- **Microphone picker** next to the level meter, listing every input by
+  the label the OS gives it, for a better mic or one placed nearer the
+  instrument. Labels are only available after permission is granted, so
+  the list fills on the first grant. The choice is saved; if the device
+  is missing at the next start, fall back to the system default and say
+  so in the bar rather than fail. Switching devices restarts the track
+  and resets the detector's noise floor.
+- **Heard tines glow** through the same highlight path a clicked tine
+  uses, in a distinct colour from a note landing, so "the song wants this"
+  and "I played this" read differently on the board.
+- **Duplicate pitches** light every tine that carries the pitch. Audio
+  cannot tell tiers apart; when a song is playing, grading prefers the
+  tine the note is placed on.
+- **Settings** gain a tolerant `mic` block: `deviceId`, `tuningCents` per
+  layout, `latencyMs`, `sensitivity`, and a top-level `muted`. Missing
+  means defaults.
+- **Browser dev**: Chrome on `localhost` allows the microphone, so the
+  whole feature works under `npm run dev` without Tauri.
+
+### 16.8 Platforms and permissions
+
+- **Windows (WebView2)**: `getUserMedia` is supported; wry routes the
+  permission request and can raise the system prompt. The first spike
+  confirms the prompt appears inside Tauri and that the answer sticks.
+- **macOS (WKWebView)**: needs `NSMicrophoneUsageDescription` in
+  `src-tauri/Info.plist` (Tauri merges it into the bundle) or the call
+  fails silently. Blind build, so this is verified on a borrowed Mac
+  before score mode is advertised for macOS.
+- **Linux (webkit2gtk)**: capture depends on the distro's GStreamer
+  plugins. Report "microphone not available here" cleanly rather than
+  hang; not a launch target.
+- Fallback if a WebView refuses the mic: capture in Rust with `cpal` and
+  ship frames over a Tauri channel, resampling and timestamping against
+  the AudioContext on arrival. Costs a native dependency and a clock
+  alignment, so only if needed.
+
+### 16.9 Grading (later, so the hit shape is right now)
+
+For each expected note, the nearest hit of the same pitch within a window
+(±80 ms full marks, ±150 ms partial, at the current tempo) claims it; each
+hit claims at most one note. Notes with no hit are misses; hits that claim
+nothing are extras and cost little (a brushed neighbour is the commonest
+kalimba mistake). Per-note verdicts drive the live feedback on the falling
+notes, a running percentage and streak sit in the bar, and a summary
+shows at the end. A song fitted with unplayable notes excludes them from
+the total. Scores are not saved in v1.
+
+### 16.10 Testing without holding the instrument
+
+- **Synthetic fixtures**: a generator that renders a decaying sine with a
+  6.3× overtone and noise at any tine frequency, so tests cover single
+  notes, a chord, an arpeggio over a ringing note, the bass row, a note
+  repeated quickly, a metronome click, and silence. Onset within ±15 ms,
+  pitch exact, no extras.
+- **Real fixtures**: WAV recordings of the actual 46-key, captured
+  through the app's own mic path by a debug "record 20 s" control added in
+  the first spike, so the fixture has the same device processing the
+  detector will see. Scripted takes: the fan ascending, the bass row, the
+  sharps tier, a chord, a fast passage. Stored under `fixtures/audio/`
+  with a text file naming the expected hits, read by a tiny WAV parser in
+  the tests. Threshold tuning happens against these, and a change that
+  breaks one fails CI, the same discipline as the MIDI and TheoryTab
+  fixtures.
+
+### 16.11 Risks
+
+| Risk | Mitigation |
+|---|---|
+| Laptop mic DSP (Windows "audio enhancements") smears tones and cannot be disabled from the page | Fixtures recorded on that mic first; a device picker; sensitivity slider; document "an external mic helps" |
+| Bass row semitones unresolved | Interpolated peaks first; longer confirmation window; template decomposition as the next step |
+| The app's own sound reaches the mic | Score mode switches mute on; metronome fails the sustain check; a user who unmutes has chosen headphones and owns the result |
+| WebView will not open the microphone | Verified in the first spike on Windows; Info.plist for macOS; `cpal` capture as the fallback |
+| Thresholds tuned to one room | Adaptive noise floor and median-relative onset threshold; fixtures from more than one setup as friends try it |

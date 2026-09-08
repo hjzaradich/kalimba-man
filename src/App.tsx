@@ -4,6 +4,10 @@ import { version as APP_VERSION } from "../package.json";
 import { AddSongPanel } from "./AddSongPanel";
 import { LayoutPanel } from "./LayoutPanel";
 import { LibraryPanel } from "./LibraryPanel";
+import { Hearing } from "./mic/hearing";
+import { Listener, type ListenerState } from "./mic/listener";
+import { clipName, recordClip, saveRecording } from "./mic/recorder";
+import { encodeWav } from "./mic/wav";
 import { freeLayoutSlug, listLayouts, loadLayout, readLayoutFromFile, readLayoutFromPath, saveLayout, type LayoutSummary } from "./layouts";
 import type { Layout, Tine } from "./model/layout";
 import { describeFit, fittedElsewhere, refitSong, restoreOriginal, selectTrack } from "./model/fit";
@@ -59,6 +63,37 @@ export default function App() {
   );
   useEffect(() => () => practice.dispose(), [practice]);
 
+  // The microphone (score mode). Lives as long as the app; the mic is
+  // released on unmount so the OS recording indicator does not linger.
+  const listener = useMemo(() => new Listener(), []);
+  const [mic, setMic] = useState<ListenerState>(listener.current);
+  useEffect(() => listener.subscribe(setMic), [listener]);
+  useEffect(() => () => listener.stop(), [listener]);
+  useEffect(() => {
+    // In dev the listener is reachable from the console (window.__mic), so
+    // frames can be inspected or captured before the recorder UI exists.
+    if (import.meta.env.DEV) (window as unknown as { __mic?: Listener }).__mic = listener;
+  }, [listener]);
+  // Hops → hits. The board subscribes to light the tines that were heard.
+  const hearing = useMemo(() => new Hearing(), []);
+  useEffect(() => hearing.attach(listener), [hearing, listener]);
+  useEffect(() => {
+    if (import.meta.env.DEV) (window as unknown as { __hearing?: Hearing }).__hearing = hearing;
+  }, [hearing]);
+  /** Seconds left of a clip being saved, or null. */
+  const [clip, setClip] = useState<number | null>(null);
+
+  // Mute (DESIGN.md §16.7): the plucks are silent, the metronome is not.
+  // Score mode switches it on and restores it on the way out; the ref
+  // lets the synth, created later on a gesture, start in the right state.
+  const [muted, setMutedState] = useState(false);
+  const mutedRef = useRef(false);
+  const mutedBeforeScore = useRef<boolean | null>(null);
+  useEffect(() => {
+    mutedRef.current = muted;
+    synthRef.current?.setMuted(muted);
+  }, [muted]);
+
   const refreshSongs = useCallback(() => {
     listSongs().then(setSaved).catch((e) => setError(String(e)));
   }, []);
@@ -67,11 +102,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    loadSettings().then(setSettings);
+    loadSettings().then((s) => {
+      setSettings(s);
+      setMutedState(s.muted);
+    });
     getDataDir().then(setDataDir);
     refreshSongs();
     refreshLayouts();
   }, [refreshSongs, refreshLayouts]);
+
+  const setMuted = useCallback((on: boolean) => {
+    setMutedState(on);
+    setSettings((s) => {
+      const next = { ...(s ?? DEFAULT_SETTINGS), muted: on };
+      void saveSettings(next);
+      return next;
+    });
+  }, []);
 
   // A user layout is a file; load it when it becomes the selected one.
   const layoutId = settings?.layoutId;
@@ -98,6 +145,7 @@ export default function App() {
     if (synthRef.current) return;
     const ctx = new AudioContext();
     synthRef.current = new Synth(ctx);
+    synthRef.current.setMuted(mutedRef.current);
     scheduler.setSynth(synthRef.current);
     transport.attachAudio(ctx);
   }, [scheduler, transport]);
@@ -192,6 +240,63 @@ export default function App() {
     practice.setMode("off");
     setNotice("Recording cancelled.");
   }, [practice]);
+
+  /**
+   * Score mode (DESIGN.md §16.7): open the microphone on the shared
+   * AudioContext. Exclusive with wait and record, so those go off first.
+   * The click that turns it on is the user gesture the permission prompt
+   * and WebKit's audio context both need.
+   */
+  const setScoreMode = useCallback(
+    async (on: boolean) => {
+      if (!on) {
+        listener.stop();
+        setNotice(null);
+        return;
+      }
+      ensureAudio();
+      const ctx = transport.audioContext;
+      if (!ctx) return;
+      practice.setMode("off");
+      setError(null);
+      const ok = await listener.start(ctx);
+      if (!ok) {
+        setError(listener.current.error ?? "Could not start the microphone.");
+        return;
+      }
+      // The instrument is the sound now; the synth heard through the mic
+      // would grade the app against itself. Headphone users can unmute.
+      mutedBeforeScore.current = mutedRef.current;
+      setMuted(true);
+      setNotice("Score mode: listening to your kalimba. Heard notes glow blue on the board.");
+    },
+    [listener, ensureAudio, transport, practice, setMuted],
+  );
+
+  // Leaving score mode, by the toggle or because the mic went away,
+  // restores mute to what it was before.
+  useEffect(() => {
+    if (mic.status === "on" || mic.status === "starting") return;
+    if (mutedBeforeScore.current !== null) {
+      setMuted(mutedBeforeScore.current);
+      mutedBeforeScore.current = null;
+    }
+  }, [mic.status, setMuted]);
+
+  /** Twenty seconds of the microphone, saved as a WAV for tuning the detector (DESIGN.md §16.10). */
+  const saveClip = useCallback(async () => {
+    setClip(20);
+    try {
+      const rec = await recordClip(listener, 20, setClip);
+      const name = clipName();
+      const where = await saveRecording(name, encodeWav(rec.samples, rec.sampleRate));
+      setNotice(`Saved ${where}`);
+    } catch (e) {
+      setError(`Could not save the clip: ${String(e)}`);
+    } finally {
+      setClip(null);
+    }
+  }, [listener]);
 
   const togglePlay = useCallback(() => {
     if (!song || practice.state.mode === "record") return;
@@ -343,6 +448,7 @@ export default function App() {
   if (!settings) return <div className="app app--loading">Loading…</div>;
 
   const layout = presetById(settings.layoutId) ?? (userLayout && userLayout.id === settings.layoutId ? userLayout : null) ?? presetById(DEFAULT_SETTINGS.layoutId)!;
+  hearing.setLayout(layout);
   layoutRef.current = layout;
 
   const chooseLayout = (layoutId: string) => {
@@ -463,7 +569,18 @@ export default function App() {
       )}
 
       <main className="stage">
-        <PlayerCanvas layout={layout} song={song} transport={transport} scheduler={scheduler} practice={practice} onHit={hit} onTine={playTine} handHints={handHints} className="player-canvas" />
+        <PlayerCanvas
+          layout={layout}
+          song={song}
+          transport={transport}
+          scheduler={scheduler}
+          practice={practice}
+          onHit={hit}
+          onTine={playTine}
+          hearing={hearing}
+          handHints={handHints}
+          className="player-canvas"
+        />
         {!song && (
           <div className="stage__empty">
             <button className="stage__big" onClick={() => setPanel({ kind: "library" })}>
@@ -490,6 +607,13 @@ export default function App() {
         onWaitMode={setWaitMode}
         onRecord={startRecording}
         onCancelRecord={cancelRecording}
+        listener={listener}
+        mic={mic}
+        onScoreMode={(on) => void setScoreMode(on)}
+        muted={muted}
+        onMute={setMuted}
+        clip={clip}
+        onSaveClip={() => void saveClip()}
       />
 
       <footer className="statusbar">

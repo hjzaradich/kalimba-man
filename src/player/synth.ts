@@ -6,6 +6,8 @@ export class Synth {
   private readonly master: GainNode;
   private readonly dry: GainNode;
   private readonly wet: GainNode;
+  /** Every pluck passes through here; mute closes it. The metronome bypasses it. */
+  private readonly plucks: GainNode;
 
   constructor(private readonly ctx: AudioContext) {
     // A limiter before the output: chords of four or five plucks would
@@ -32,6 +34,19 @@ export class Synth {
     this.wet.gain.value = 0.35;
     this.wet.connect(convolver);
     convolver.connect(this.master);
+
+    this.plucks = ctx.createGain();
+    this.plucks.connect(this.dry);
+    this.plucks.connect(this.wet);
+  }
+
+  /**
+   * Silence the plucks without stopping them (DESIGN.md §16.7): the song
+   * still runs and the board still glows, only the sound is gone. A short
+   * ramp avoids a click on the way in or out.
+   */
+  setMuted(muted: boolean) {
+    this.plucks.gain.setTargetAtTime(muted ? 0 : 1, this.ctx.currentTime, 0.01);
   }
 
   /** Schedule one pluck at an AudioContext time. */
@@ -47,8 +62,7 @@ export class Synth {
     env.gain.setValueAtTime(0, start);
     env.gain.linearRampToValueAtTime(velocity, start + 0.004);
     env.gain.exponentialRampToValueAtTime(0.001, start + ring);
-    env.connect(this.dry);
-    env.connect(this.wet);
+    env.connect(this.plucks);
 
     const partials: [number, number][] = [
       [1, 1],

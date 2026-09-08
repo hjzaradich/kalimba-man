@@ -8,6 +8,13 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [react()],
 
+  build: {
+    // The audio worklet must be a real file: it is loaded by URL with
+    // audioWorklet.addModule, and a small asset would otherwise be inlined
+    // as a data: URL, which not every WebView accepts for worklet modules.
+    assetsInlineLimit: (file) => (file.endsWith(".worklet.js") ? false : undefined),
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

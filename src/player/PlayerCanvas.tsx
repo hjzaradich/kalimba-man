@@ -6,6 +6,7 @@ import { playerTineAt } from "../board/hitTest";
 import { placeNotes } from "./noteLayout";
 import type { Transport } from "./transport";
 import type { Scheduler } from "./scheduler";
+import type { Hearing } from "../mic/hearing";
 import type { Practice } from "./practice";
 
 interface Props {
@@ -22,6 +23,8 @@ interface Props {
    * layout. Return false to skip the flash.
    */
   onTine?: (tine: Tine, index: number) => boolean | void;
+  /** Notes heard through the microphone glow on their tines in their own colour. */
+  hearing?: Hearing;
   handHints?: boolean;
   /** Fraction of the canvas height given to the board. */
   boardFraction?: number;
@@ -37,12 +40,24 @@ interface Props {
 const FLASH_SECONDS = 0.35;
 /** How far, in pixels, a click may miss a tine and still pluck the nearest one. */
 const CLICK_SLACK = 8;
+/** Glow of a tine the microphone heard: distinct from the white of a landing note. */
+const HEARD_COLOR = "#5fe0ff";
+/** A heard tine glows a little longer than a clicked one, so a fast passage still reads. */
+const HEARD_SECONDS = 0.5;
 
-export function PlayerCanvas({ layout, song, transport, scheduler, practice, onHit, onTine, handHints, boardFraction = 0.46, className }: Props) {
+export function PlayerCanvas({ layout, song, transport, scheduler, practice, onHit, onTine, hearing, handHints, boardFraction = 0.46, className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** CSS size of the canvas, kept by the resize observer; clicks hit-test against it. */
   const sizeRef = useRef({ width: 0, height: 0 });
-  const flashes = useRef<{ tine: number; at: number }[]>([]);
+  const flashes = useRef<{ tine: number; at: number; seconds: number; color?: string }[]>([]);
+
+  useEffect(() => {
+    if (!hearing) return;
+    return hearing.onHit((hits) => {
+      const at = performance.now() / 1000;
+      for (const h of hits) for (const tine of h.tines) flashes.current.push({ tine, at, seconds: HEARD_SECONDS, color: HEARD_COLOR });
+    });
+  }, [hearing]);
   const placements = useMemo(() => (song ? placeNotes(song, layout) : []), [song, layout]);
   // Other tracks of a multi-track song, shifted like the active one, drawn faintly.
   const ghosts = useMemo(() => {
@@ -90,7 +105,7 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const f = frameRef.current;
       const nowReal = performance.now() / 1000;
-      flashes.current = flashes.current.filter((x) => nowReal - x.at < FLASH_SECONDS);
+      flashes.current = flashes.current.filter((x) => nowReal - x.at < x.seconds);
       const boardHeight = Math.round(height * f.boardFraction);
       drawPlayerFrame(ctx, {
         layout: f.layout,
@@ -104,7 +119,7 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
         pending: practice.pendingNotes,
         hint: hintFor(practice) ?? leadInHint(transport.leadInRemaining(), transport.isPlaying),
         loop: transport.loop,
-        extraHighlights: flashes.current.map((x) => ({ tine: x.tine, strength: 1 - (nowReal - x.at) / FLASH_SECONDS })),
+        extraHighlights: flashes.current.map((x) => ({ tine: x.tine, strength: 1 - (nowReal - x.at) / x.seconds, color: x.color })),
         ghosts: f.ghosts,
       });
     };
@@ -136,7 +151,7 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
     const index = playerTineAt(layout, width, height, boardFraction, e.clientX - rect.left, e.clientY - rect.top, CLICK_SLACK);
     if (index !== null) {
       const tine = layout.tines[index];
-      if (onTine?.(tine, index) !== false) flashes.current.push({ tine: index, at: performance.now() / 1000 });
+      if (onTine?.(tine, index) !== false) flashes.current.push({ tine: index, at: performance.now() / 1000, seconds: FLASH_SECONDS });
       return;
     }
     onHit?.();
