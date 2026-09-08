@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
+import { version as APP_VERSION } from "../package.json";
 import { AddSongPanel } from "./AddSongPanel";
 import { LayoutPanel } from "./LayoutPanel";
 import { LibraryPanel } from "./LibraryPanel";
@@ -498,7 +499,10 @@ export default function App() {
           {layout.tines.length} tines
           {layout.draft ? " · draft layout" : ""}
         </span>
-        <span className={error ? "error" : "muted"}>{error ?? notice ?? (dataDir ? `Data: ${dataDir}` : "Browser preview (songs kept in this browser)")}</span>
+        <span className={error ? "error" : "muted"}>
+          {error ?? notice ?? (dataDir ? `Data: ${dataDir}` : "Browser preview (songs kept in this browser)")}
+          {" · "}v{APP_VERSION}
+        </span>
       </footer>
 
       {panel.kind === "library" && (
