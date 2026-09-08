@@ -90,6 +90,15 @@ both the fitted notes and the record. Do not transpose or fold a song's notes
 in place anywhere else; the user must be able to undo it or redo it for a
 different kalimba (`restoreOriginal`, `fittedElsewhere`).
 
+**Tine clicks hit-test the layout, never a cached frame.** `PlayerCanvas`
+recomputes the board geometry from the current layout and canvas size on
+every pointer-down (`playerTineAt`) and hands the `Tine` itself to `onTine`,
+so a click straight after a layout change cannot resolve against an older
+layout or a frame that failed to draw. Sounding a tine goes through
+`soundPitch`, which waits for a suspended or interrupted AudioContext to
+resume before plucking (WebKit parks the context after idle time). Do not
+reintroduce an index-into-the-last-drawn-geometry path.
+
 **The parser never drops input silently.** Anything `notation.ts` cannot read
 becomes a warning with a line and column. Add a test case with the real
 text whenever a site post trips it.
@@ -102,7 +111,7 @@ text whenever a site post trips it.
 - `src/model/capability.ts` — can this kalimba play this song; transpose/fold fixes.
 - `src/model/recording.ts` — hit groups and tap-to-record re-timing (pure, tested).
 - `src/model/layoutEdit.ts` — pure editing operations on layouts (fills, tiers, tines); `src/model/pitch.ts` — note names.
-- `src/layouts.ts` — user layout files (Tauri or localStorage) and `coerceLayout`; `src/LayoutPanel.tsx` — the kalimba manager and editor; `src/board/hitTest.ts` — click → tine.
+- `src/layouts.ts` — user layout files (Tauri or localStorage) and `coerceLayout`; `src/LayoutPanel.tsx` — the kalimba manager and editor; `src/board/hitTest.ts` — click → tine (pure, tested; the player uses `playerTineAt`).
 - `src/board/geometry.ts` — pure tine geometry (tested). `drawBoard.ts` paints it; `labels.ts` draws printed labels.
 - `src/player/` — `transport.ts` (clock), `synth.ts` (Web Audio voice), `scheduler.ts` (hands notes to the synth ahead of time), `noteLayout.ts` (note → tine), `drawPlayer.ts` (one frame), `PlayerCanvas.tsx` (rAF loop), `practice.ts` (wait mode and recording on top of the transport), `TransportBar.tsx`.
 - `src/presets.ts` — the shipped layouts, imported from `layouts/*.layout.json`.

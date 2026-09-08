@@ -4,7 +4,7 @@ import { AddSongPanel } from "./AddSongPanel";
 import { LayoutPanel } from "./LayoutPanel";
 import { LibraryPanel } from "./LibraryPanel";
 import { freeLayoutSlug, listLayouts, loadLayout, readLayoutFromFile, readLayoutFromPath, saveLayout, type LayoutSummary } from "./layouts";
-import type { Layout } from "./model/layout";
+import type { Layout, Tine } from "./model/layout";
 import { describeFit, fittedElsewhere, refitSong, restoreOriginal, selectTrack } from "./model/fit";
 import { applyRecordedTiming, groupNotes } from "./model/recording";
 import { songDuration, type Song } from "./model/song";
@@ -122,21 +122,41 @@ export default function App() {
     if (song) transport.toggle();
   }, [practice, song, transport, ensureAudio]);
 
+  /**
+   * Sound one pitch now, from a user gesture. WebKit parks the context as
+   * "suspended" or "interrupted" after idle time or a system interruption,
+   * and a pluck scheduled on a parked context never sounds; so wait for it
+   * to run first. The await resolves inside the gesture's activation window.
+   */
+  const soundPitch = useCallback(
+    async (pitch: number) => {
+      ensureAudio();
+      const ctx = transport.audioContext;
+      const synth = synthRef.current;
+      if (!ctx || !synth) return;
+      try {
+        if (ctx.state !== "running") await ctx.resume();
+        synth.pluck(pitch, ctx.currentTime);
+      } catch (e) {
+        setError(`Could not play the note: ${String(e)}`);
+      }
+    },
+    [ensureAudio, transport],
+  );
+
   /** A tine was clicked: in a hold, that is the hit; otherwise just sound it. */
   const playTine = useCallback(
-    (index: number) => {
+    (tine: Tine) => {
       ensureAudio();
       void transport.audioContext?.resume();
       if (practice.state.waiting) {
         practice.hit();
         return true;
       }
-      const ctx = transport.audioContext;
-      const pitch = layoutRef.current.tines[index]?.pitch;
-      if (ctx && synthRef.current && pitch !== undefined) synthRef.current.pluck(pitch, ctx.currentTime);
+      void soundPitch(tine.pitch);
       return true;
     },
-    [practice, transport, ensureAudio],
+    [practice, transport, ensureAudio, soundPitch],
   );
 
   const setWaitMode = useCallback(
@@ -390,7 +410,14 @@ export default function App() {
 
         <label className="picker">
           <span>Kalimba</span>
-          <select value={layout.id} onChange={(e) => chooseLayout(e.target.value)}>
+          <select
+            value={layout.id}
+            onChange={(e) => {
+              chooseLayout(e.target.value);
+              // Let focus go, or Space keeps landing in the picker (WebKit).
+              e.currentTarget.blur();
+            }}
+          >
             <optgroup label="Built in">
               {PRESET_LAYOUTS.map((l) => (
                 <option key={l.id} value={l.id}>

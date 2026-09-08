@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { Layout } from "../model/layout";
+import type { Layout, Tine } from "../model/layout";
 import type { Song } from "../model/song";
 import { drawPlayerFrame } from "./drawPlayer";
-import { tineAt } from "../board/hitTest";
-import type { BoardGeometry } from "../board/geometry";
+import { playerTineAt } from "../board/hitTest";
 import { placeNotes } from "./noteLayout";
 import type { Transport } from "./transport";
 import type { Scheduler } from "./scheduler";
@@ -17,8 +16,12 @@ interface Props {
   practice: Practice;
   /** Left click in the lane: a hit in wait/record mode, otherwise play/pause. */
   onHit?: () => void;
-  /** Left click on a tine: play it. Return true to also flash the tine. */
-  onTine?: (tineIndex: number) => boolean | void;
+  /**
+   * Left click on a tine: play it. The tine comes from the layout the
+   * click was tested against, so the pitch can never belong to an older
+   * layout. Return false to skip the flash.
+   */
+  onTine?: (tine: Tine, index: number) => boolean | void;
   handHints?: boolean;
   /** Fraction of the canvas height given to the board. */
   boardFraction?: number;
@@ -32,10 +35,13 @@ interface Props {
  */
 /** How long a clicked tine glows, in seconds. */
 const FLASH_SECONDS = 0.35;
+/** How far, in pixels, a click may miss a tine and still pluck the nearest one. */
+const CLICK_SLACK = 8;
 
 export function PlayerCanvas({ layout, song, transport, scheduler, practice, onHit, onTine, handHints, boardFraction = 0.46, className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const geoRef = useRef<{ geo: BoardGeometry; laneHeight: number } | null>(null);
+  /** CSS size of the canvas, kept by the resize observer; clicks hit-test against it. */
+  const sizeRef = useRef({ width: 0, height: 0 });
   const flashes = useRef<{ tine: number; at: number }[]>([]);
   const placements = useMemo(() => (song ? placeNotes(song, layout) : []), [song, layout]);
   // Other tracks of a multi-track song, shifted like the active one, drawn faintly.
@@ -70,6 +76,7 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
       canvas.height = Math.floor(height * dpr);
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
+      sizeRef.current = { width, height };
     };
 
     const loop = () => {
@@ -85,7 +92,7 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
       const nowReal = performance.now() / 1000;
       flashes.current = flashes.current.filter((x) => nowReal - x.at < FLASH_SECONDS);
       const boardHeight = Math.round(height * f.boardFraction);
-      const geo = drawPlayerFrame(ctx, {
+      drawPlayerFrame(ctx, {
         layout: f.layout,
         song: f.song,
         placements: f.placements,
@@ -100,7 +107,6 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
         extraHighlights: flashes.current.map((x) => ({ tine: x.tine, strength: 1 - (nowReal - x.at) / FLASH_SECONDS })),
         ghosts: f.ghosts,
       });
-      geoRef.current = { geo, laneHeight: height - boardHeight };
     };
 
     resize();
@@ -113,25 +119,30 @@ export function PlayerCanvas({ layout, song, transport, scheduler, practice, onH
     };
   }, [transport, scheduler, practice]);
 
-  const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Pointer events cover mouse, trackpad, pen and touch alike. The tine is
+  // found from the current layout and the canvas's own size, never from what
+  // the last animation frame happened to draw, so a click straight after a
+  // layout change or a resize lands where the eye says it should.
+  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
-    const g = geoRef.current;
-    if (g) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top - g.laneHeight;
-      if (y >= 0) {
-        const tine = tineAt(g.geo, x, y);
-        if (tine !== null) {
-          if (onTine?.(tine) !== false) flashes.current.push({ tine, at: performance.now() / 1000 });
-          return;
-        }
-      }
+    e.preventDefault();
+    // Take keyboard focus away from whatever toolbar control had it (a
+    // kalimba picker left focused after a change swallows Space on WebKit).
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== e.currentTarget) active.blur();
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const { width, height } = sizeRef.current.width > 0 ? sizeRef.current : { width: rect.width, height: rect.height };
+    const index = playerTineAt(layout, width, height, boardFraction, e.clientX - rect.left, e.clientY - rect.top, CLICK_SLACK);
+    if (index !== null) {
+      const tine = layout.tines[index];
+      if (onTine?.(tine, index) !== false) flashes.current.push({ tine: index, at: performance.now() / 1000 });
+      return;
     }
     onHit?.();
   };
 
-  return <canvas ref={canvasRef} className={className} onMouseDown={onMouseDown} />;
+  return <canvas ref={canvasRef} className={className} onPointerDown={onPointerDown} style={{ touchAction: "none" }} />;
 }
 
 /** Countdown during the silent lead-in before the first note, in real seconds. */
